@@ -65,6 +65,7 @@ export function createBuilderState(initial?: FajrinaData): {
       const comp: UniversalComponent = {
         id: genId(),
         type: type as UniversalComponent['type'],
+        component: type as UniversalComponent['type'],
         props: {},
         style: {},
         parentId: parentId ?? null,
