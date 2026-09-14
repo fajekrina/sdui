@@ -80,7 +80,26 @@ export function createBuilderState(initial?: FajrinaData): {
       const idx = components.findIndex(c => c.id === id)
       if (idx === -1) return
       const cur = components[idx]
-      components[idx] = { ...cur, ...patch, props: patch.props ? { ...(cur.props as object), ...patch.props } : cur.props, style: patch.style ? { ...(cur.style as object), ...patch.style } : cur.style } as UniversalComponent
+      // deep merge props.action + top-level action sync
+      const next: UniversalComponent = { ...cur, ...patch } as UniversalComponent
+      if (patch.props) {
+        const curAction = (cur.props as Record<string, unknown>)?.action as Record<string, unknown> | undefined
+        const patchAction = (patch.props as Record<string, unknown>)?.action as Record<string, unknown> | undefined
+        const mergedAction = patchAction ? { ...(curAction ?? {}), ...patchAction } : curAction
+        next.props = { ...(cur.props as object ?? {}), ...patch.props } as Record<string, unknown>
+        if (mergedAction && Object.keys(mergedAction).length) (next.props as Record<string, unknown>).action = mergedAction
+        else if (patchAction === null) delete (next.props as Record<string, unknown>).action
+      }
+      if ((patch as Record<string, unknown>).action !== undefined) {
+        const curTop = (cur as unknown as Record<string, unknown>).action as Record<string, unknown> | undefined
+        const patchTop = (patch as Record<string, unknown>).action as Record<string, unknown> | undefined
+        if (patchTop) next.action = { ...(curTop ?? {}), ...patchTop } as unknown as UniversalComponent['action']
+        else next.action = undefined as unknown as UniversalComponent['action']
+        // sync props.action with top-level
+        if (next.action) (next.props as Record<string, unknown>).action = next.action as unknown as Record<string, unknown>
+      }
+      if (patch.style) next.style = { ...(cur.style as object ?? {}), ...patch.style } as Record<string, string>
+      components[idx] = next
     },
     remove(id) {
       const toDelete = new Set([id])

@@ -48,34 +48,40 @@ function closeModal() {
 
 function emitAction(comp: UniversalComponent, extra?: Record<string, unknown>) {
   const p = (comp.props ?? {}) as Record<string, unknown>
-  const action = (p.action as string | undefined) ?? (p.behavior as string | undefined) ?? (comp.action?.behavior as string | undefined) ?? (comp.action?.action as string | undefined)
-  const target = (p.target as string | undefined) ?? (comp.action?.target as string | undefined)
+  const pActionObj = p.action && typeof p.action === 'object' ? p.action as Record<string, unknown> : undefined
+  const compActionObj = comp.action as unknown as Record<string, unknown> | undefined
+  const actionObj = pActionObj ?? compActionObj
+  const behavior = (actionObj?.behavior as string | undefined) ?? (typeof p.action === 'string' ? p.action as string : undefined) ?? (p.behavior as string | undefined) ?? (compActionObj?.behavior as string | undefined) ?? (compActionObj?.action as string | undefined)
+  const action = behavior
+  const target = (actionObj?.target as string | undefined) ?? (p.target as string | undefined) ?? (compActionObj?.target as string | undefined)
   const ev: FajrinaActionEvent = {
     behavior: action,
     action,
     target,
     data: extra,
-    params: (comp.action?.params as Record<string, unknown> | undefined) ?? (p.params as Record<string, unknown> | undefined),
+    params: (actionObj?.params as Record<string, unknown> | undefined) ?? (compActionObj?.params as Record<string, unknown> | undefined) ?? (p.params as Record<string, unknown> | undefined),
     sourceComponent: comp
   }
   emit('action', ev)
   if (action === 'externalLink') {
-    const href = (p.href as string | undefined) ?? (comp.action?.href as string | undefined) ?? (p.url as string | undefined)
+    const href = (actionObj?.href as string | undefined) ?? (compActionObj?.href as string | undefined) ?? (p.href as string | undefined) ?? (p.url as string | undefined)
     if (href) window.open(href, '_blank', 'noopener')
   }
   if (action === 'back') window.history.back()
   if (action === 'toast') {
-    const msg = String(p.message ?? comp.action?.message ?? p.content ?? 'Toast')
+    const msg = String(actionObj?.message ?? compActionObj?.message ?? p.message ?? p.content ?? 'Toast')
     showToast(msg)
   }
   if (action === 'openModal') {
-    const modalId = String(comp.action?.modalId ?? p.target ?? comp.id)
-    openModal({ id: modalId, title: String(p.title ?? ''), message: String(p.message ?? '') })
+    const modalId = String(actionObj?.modalId ?? compActionObj?.modalId ?? p.target ?? (p as Record<string,unknown>).target ?? comp.id)
+    const title = String(actionObj?.title ?? p.title ?? '')
+    const message = String(actionObj?.message ?? p.message ?? '')
+    openModal({ id: modalId, title, message })
   }
   if (action === 'closeModal') closeModal()
-  if (action === 'customEvent' && (p.eventName || comp.action?.eventName)) {
-    const name = String(p.eventName ?? comp.action?.eventName ?? 'customEvent')
-    document.dispatchEvent(new CustomEvent(name, { detail: (comp.action?.params ?? p.params) as Record<string, unknown> }))
+  if (action === 'customEvent' && (actionObj?.eventName || compActionObj?.eventName || p.eventName)) {
+    const name = String(actionObj?.eventName ?? compActionObj?.eventName ?? p.eventName ?? 'customEvent')
+    document.dispatchEvent(new CustomEvent(name, { detail: (actionObj?.params ?? compActionObj?.params ?? p.params) as Record<string, unknown> }))
     showToast(`Event ${name} dispatched`)
   }
 }

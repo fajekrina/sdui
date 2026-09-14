@@ -14,6 +14,8 @@ export type RegistryComponents = Record<string, { props?: Record<string, unknown
 export interface FajrinaBuilderProps {
   data?: FajrinaData
   registry?: RegistryComponents
+  pages?: string[]
+  modals?: { id: string }[]
   onChange?: (layout: { components: UniversalComponent[] }) => void
   onSave?: (payload: { components: UniversalComponent[] }) => Promise<void> | void
   onPublish?: (payload: { components: UniversalComponent[] }) => Promise<void> | void
@@ -23,7 +25,7 @@ export interface FajrinaBuilderProps {
   style?: React.CSSProperties
 }
 
-const FALLBACK_ORDER = ['Container','Heading','Text','Button','Image','Input','Select','Textarea','Form','Link','Flex','Grid','Card','Hero','Divider','Space']
+const FALLBACK_ORDER = ['Container','Heading','Text','Button','Image','Input','Select','Textarea','Form','Link','Flex','Grid','Card','Hero','Divider','Space','Modal']
 
 function paletteOrder(reg?: RegistryComponents): string[] {
   const keys = reg ? Object.keys(reg) : FALLBACK_ORDER
@@ -39,11 +41,12 @@ function dotColor(type: string) {
   if (type==='Container') return '#6c8cff'
   if (type==='Heading') return '#f59e0b'
   if (type==='Button') return '#3ad29f'
+  if (type==='Modal') return '#f472b6'
   if (['Input','Select','Textarea','Form'].includes(type)) return '#a78bfa'
   return '#232a45'
 }
 
-export function FajrinaBuilder({ data, registry, onChange, onSave, onPublish, merchantId, pageKey, className, style }: FajrinaBuilderProps) {
+export function FajrinaBuilder({ data, registry, pages, modals, onChange, onSave, onPublish, merchantId, pageKey, className, style }: FajrinaBuilderProps) {
   const stateRef = useRef(createBuilderState(data))
   const [, bump] = useState(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -70,6 +73,9 @@ export function FajrinaBuilder({ data, registry, onChange, onSave, onPublish, me
   const selected = comps.find(c => c.id === selectedId) ?? null
   const palette = useMemo(() => paletteOrder(registry), [registry])
   const tree = useMemo(() => buildTree(comps), [comps, jsonText])
+  const internalModals = useMemo(()=> comps.filter(c=>getComponentType(c as UniversalComponent)==='Modal').map(c=>({id:c.id})), [comps, jsonText])
+  const effectivePages = pages ?? ['home']
+  const effectiveModals = (modals && modals.length ? modals : internalModals) as {id:string}[]
 
   const syncOut = (next: UniversalComponent[]) => {
     lastEmittedRef.current = next.map(c=>c.id).sort().join(',')
@@ -110,6 +116,29 @@ export function FajrinaBuilder({ data, registry, onChange, onSave, onPublish, me
     syncOut(stateRef.current.toFlatArray())
   }
 
+  const updateAction = (behavior: string, extra: Record<string, unknown> = {}) => {
+    if (!selected) return
+    const curPropsA = ((selected.props as Record<string, unknown>)?.action as Record<string, unknown> ?? {}) as Record<string, unknown>
+    const curTopA = ((selected as UniversalComponent).action as Record<string, unknown> ?? {}) as Record<string, unknown>
+    const base: Record<string, unknown> = { ...curPropsA, ...curTopA, behavior, ...extra }
+    // cleanup per behavior
+    const keep: Record<string, string[]> = {
+      navigate: ['behavior','target','params'],
+      submit: ['behavior','target','modalId','params'],
+      externalLink: ['behavior','href','target'],
+      openModal: ['behavior','modalId','title','message'],
+      closeModal: ['behavior','modalId'],
+      toast: ['behavior','message'],
+      customEvent: ['behavior','eventName','params'],
+      back: ['behavior'],
+    }
+    const allowed = keep[behavior] ?? ['behavior','target','href','modalId','message','eventName','params']
+    for (const k of Object.keys(base)) if (!allowed.includes(k)) delete base[k]
+    const { behavior: _b, target: _t, href: _h, modalId: _m, message: _msg, eventName: _e, params: _p, action: _a, ...restProps } = selected.props as Record<string, unknown>
+    stateRef.current.patch(selected.id, { props: { ...restProps, action: base } as Record<string, unknown>, action: base as unknown as UniversalComponent['action'] })
+    syncOut(stateRef.current.toFlatArray())
+  }
+
   const onJsonEdit = (v: string) => {
     setJsonText(v)
     try {
@@ -127,10 +156,10 @@ export function FajrinaBuilder({ data, registry, onChange, onSave, onPublish, me
   const doSave = async () => { try{ await onSave?.({ components: comps }); setStatus('Saved ✔'); setTimeout(()=>setStatus(''),2500)}catch(e:unknown){ setStatus('Save failed: '+(e as Error).message)} }
   const doPublish = async () => { try{ await onPublish?.({ components: comps }); setStatus('Published ✔'); setTimeout(()=>setStatus(''),2500)}catch(e:unknown){ setStatus('Publish failed: '+(e as Error).message)} }
 
-  // render tree node with drop-hint for Container/Form
+  // render tree node with drop-hint for Container/Form/Modal/Grid/Flex
   function renderNode(node: UniversalComponent & {children: UniversalComponent[]}) {
     const t = getComponentType(node)
-    const isContainer = ['Container','Form'].includes(t)
+    const isContainer = ['Container','Form','Modal','Grid','Flex','Card','Hero'].includes(t)
     const isSelected = node.id===selectedId
     const isDragOver = dragOverId===node.id
     const style: React.CSSProperties = { position:'relative', border: isSelected ? '1px solid #6c8cff' : '1px solid transparent', borderRadius:8, padding:4, background: isSelected ? 'rgba(108,140,255,.06)' : 'transparent', outline: isDragOver ? '2px dashed #6c8cff' : undefined, outlineOffset: -2 }
@@ -224,8 +253,8 @@ export function FajrinaBuilder({ data, registry, onChange, onSave, onPublish, me
                     <Field label="label"><input value={String((selected.props as Record<string,unknown>)?.label ?? '')} onChange={e=>patchSelected({label:e.target.value})} style={inp()} /></Field>
                     <Field label="type"><select value={String((selected.props as Record<string,unknown>)?.type ?? 'button')} onChange={e=>patchSelected({type:e.target.value})} style={inp()}><option>button</option><option>submit</option><option>reset</option></select></Field>
                     <Field label="disabled"><select value={String(Boolean((selected.props as Record<string,unknown>)?.disabled))} onChange={e=>patchSelected({disabled:e.target.value==='true'})} style={inp()}><option value="false">false</option><option value="true">true</option></select></Field>
-                    <Field label="action.behavior"><select value={String((selected.props as Record<string,unknown>)?.behavior ?? (selected as UniversalComponent).action?.behavior ?? 'navigate')} onChange={e=>{ const v=e.target.value; const cur=(selected.props ?? {}) as Record<string,unknown>; const act=(selected as UniversalComponent).action ?? {}; stateRef.current.patch(selected.id, {props:{...cur, behavior:v} as Record<string,unknown>, action:{...act, behavior:v} as UniversalComponent['action']}); syncOut(stateRef.current.toFlatArray())}} style={inp()}><option>navigate</option><option>submit</option><option>externalLink</option><option>back</option><option>openModal</option><option>closeModal</option><option>toast</option><option>customEvent</option></select></Field>
-                    <Field label="target / href"><input value={String((selected.props as Record<string,unknown>)?.target ?? (selected as UniversalComponent).action?.target ?? (selected.props as Record<string,unknown>)?.href ?? '')} onChange={e=>patchSelected({target:e.target.value})} style={inp()} /></Field>
+                    <Field label="action.behavior"><select value={String(((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.behavior ?? (selected as UniversalComponent).action?.behavior ?? 'navigate')} onChange={e=>updateAction(e.target.value)} style={inp()}><option>navigate</option><option>submit</option><option>externalLink</option><option>back</option><option>openModal</option><option>closeModal</option><option>toast</option><option>customEvent</option></select></Field>
+                    {(() => { const beh = String(((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.behavior ?? (selected as UniversalComponent).action?.behavior ?? 'navigate'); const act = (((selected.props as Record<string,unknown>)?.action as Record<string,unknown>) ?? (selected as UniversalComponent).action as Record<string,unknown> ?? {}) as Record<string,unknown>; const btnType = String((selected.props as Record<string,unknown>)?.type ?? 'button'); if (beh==='navigate') return <><Field label="target (page)"><select value={String(act.target ?? '')} onChange={e=>updateAction('navigate', {target:e.target.value})} style={inp()}><option value="">-- pilih page --</option>{effectivePages.map(p=> <option key={p} value={p}>{p}</option>)}{effectivePages && !effectivePages.includes('home') ? <option value="home">home</option> : null}</select></Field><Field label="params (JSON)"><textarea value={act.params ? JSON.stringify(act.params,null,2) : ''} onChange={e=>{ try{ const v=JSON.parse(e.target.value); updateAction('navigate', {target:String(act.target ?? ''), params:v})}catch{}}} style={{...inp(), minHeight:60, fontFamily:'monospace', fontSize:11}} /></Field></>; if (beh==='externalLink') return <Field label="href"><input value={String(act.href ?? '')} onChange={e=>updateAction('externalLink', {href:e.target.value})} style={inp()} placeholder="https://example.com" /></Field>; if (beh==='openModal') return <><Field label="modalId"><select value={String(act.modalId ?? '')} onChange={e=>updateAction('openModal', {modalId:e.target.value})} style={inp()}><option value="">-- pilih Modal --</option>{effectiveModals.map(m=> <option key={m.id} value={m.id}>{m.id.slice(-6)}</option>)}{(effectiveModals.length===0) && <option disabled>Belum ada Modal — buat komponen Modal dulu</option>}</select></Field><Field label="title"><input value={String(act.title ?? '')} onChange={e=>updateAction('openModal', {modalId:String(act.modalId ?? ''), title:e.target.value})} style={inp()} /></Field><Field label="message"><textarea value={String(act.message ?? '')} onChange={e=>updateAction('openModal', {modalId:String(act.modalId ?? ''), message:e.target.value})} style={{...inp(), minHeight:50}} /></Field></>; if (beh==='toast') return <Field label="message"><textarea value={String(act.message ?? '')} onChange={e=>updateAction('toast', {message:e.target.value})} style={{...inp(), minHeight:50}} placeholder="Berhasil disimpan" /></Field>; if (beh==='customEvent') return <><Field label="eventName"><input value={String(act.eventName ?? '')} onChange={e=>updateAction('customEvent', {eventName:e.target.value})} style={inp()} /></Field><Field label="params (JSON)"><textarea value={act.params ? JSON.stringify(act.params,null,2) : ''} onChange={e=>{ try{ updateAction('customEvent', {eventName:String(act.eventName ?? ''), params:JSON.parse(e.target.value)})}catch{}}} style={{...inp(), minHeight:60, fontFamily:'monospace', fontSize:11}} /></Field></>; if (beh==='submit') { const isSubmitModal = !!act.modalId; return <><Field label="On success"><select value={isSubmitModal ? 'openModal' : 'navigate'} onChange={e=>{ if(e.target.value==='openModal') updateAction('submit', {modalId: effectiveModals[0]?.id ?? '', target: undefined}); else updateAction('submit', {target: effectivePages[0] ?? 'home', modalId: undefined})} } style={inp()}><option value="navigate">Redirect to page</option><option value="openModal">Open modal</option></select></Field>{isSubmitModal ? <Field label="modalId"><select value={String(act.modalId ?? '')} onChange={e=>updateAction('submit', {modalId:e.target.value})} style={inp()}><option value="">-- pilih Modal --</option>{effectiveModals.map(m=> <option key={m.id} value={m.id}>{m.id.slice(-6)}</option>)}{(effectiveModals.length===0) && <option disabled>Belum ada Modal — buat komponen Modal dulu</option>}</select></Field> : <Field label="target (page)"><select value={String(act.target ?? '')} onChange={e=>updateAction('submit', {target:e.target.value})} style={inp()}><option value="">-- pilih page --</option>{effectivePages.map(p=> <option key={p} value={p}>{p}</option>)}</select></Field>}<Field label="params (JSON)"><textarea value={act.params ? JSON.stringify(act.params,null,2) : ''} onChange={e=>{ try{ const v=JSON.parse(e.target.value); if(isSubmitModal) updateAction('submit', {modalId:String(act.modalId ?? ''), params:v}); else updateAction('submit', {target:String(act.target ?? ''), params:v})}catch{}}} style={{...inp(), minHeight:60, fontFamily:'monospace', fontSize:11}} /></Field></> } return null })()}
                   </>}
                   {['Input','Select','Textarea'].includes(String(getComponentType(selected))) && <>
                     <Field label="name"><input value={String((selected.props as Record<string,unknown>)?.name ?? '')} onChange={e=>patchSelected({name:e.target.value})} style={inp()} /></Field>
@@ -264,7 +293,7 @@ export function FajrinaBuilder({ data, registry, onChange, onSave, onPublish, me
                     <Field label="action"><input value={String((selected.props as Record<string,unknown>)?.action ?? '')} onChange={e=>patchSelected({action:e.target.value})} style={inp()} /></Field>
                     <Field label="method"><select value={String((selected.props as Record<string,unknown>)?.method ?? 'POST')} onChange={e=>patchSelected({method:e.target.value})} style={inp()}><option>POST</option><option>GET</option></select></Field>
                   </>}
-                  <Field label="props (JSON)"><textarea value={JSON.stringify(selected.props ?? {}, null, 2)} onChange={e=>{ try{ const p=JSON.parse(e.target.value); stateRef.current.patch(selected.id, {props:p} as Partial<UniversalComponent>); syncOut(stateRef.current.toFlatArray())}catch{}}} style={{...inp(), minHeight:70, fontFamily:'monospace', fontSize:11}} /></Field>
+                  <Field label="props (JSON)"><textarea value={JSON.stringify({ ...(selected.props ?? {}), ...((selected as UniversalComponent).action ? {action:(selected as UniversalComponent).action} : {}) }, null, 2)} onChange={e=>{ try{ const p=JSON.parse(e.target.value) as Record<string,unknown>; const act=p.action as Record<string,unknown> | undefined; const rest={...p}; delete (rest as Record<string,unknown>).action; stateRef.current.patch(selected.id, {props:{ ...(selected.props as object ?? {}), ...rest, ...(act?{action:act}:{})} as Record<string,unknown>, ...(act?{action: act as unknown as UniversalComponent['action'] }:{})} ); syncOut(stateRef.current.toFlatArray())}catch{}}} style={{...inp(), minHeight:70, fontFamily:'monospace', fontSize:11}} /></Field>
                 </div>
               </div>
 

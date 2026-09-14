@@ -14,6 +14,8 @@ export type RegistryComponents = Record<string, { props?: Record<string, unknown
 const props = defineProps<{
   data?: FajrinaData
   registry?: RegistryComponents
+  pages?: string[]
+  modals?: { id: string }[]
   merchantId?: string
   pageKey?: string
   modelValue?: unknown
@@ -25,7 +27,7 @@ const emit = defineEmits<{
   (e: 'update:modelValue', v: unknown): void
 }>()
 
-const FALLBACK_ORDER = ['Container','Heading','Text','Button','Image','Input','Select','Textarea','Form','Link','Flex','Grid','Card','Hero','Divider','Space']
+const FALLBACK_ORDER = ['Container','Heading','Text','Button','Image','Input','Select','Textarea','Form','Link','Flex','Grid','Card','Hero','Divider','Space','Modal']
 function paletteOrder(reg?: RegistryComponents): string[] {
   const keys = reg ? Object.keys(reg) : FALLBACK_ORDER
   const ordered = FALLBACK_ORDER.filter(k => keys.includes(k))
@@ -36,6 +38,7 @@ function dotColor(t: string) {
   if (t==='Container') return '#6c8cff'
   if (t==='Heading') return '#f59e0b'
   if (t==='Button') return '#3ad29f'
+  if (t==='Modal') return '#f472b6'
   if (['Input','Select','Textarea','Form'].includes(t)) return '#a78bfa'
   return '#232a45'
 }
@@ -54,6 +57,9 @@ const selected = computed(() => comps.value.find(c => c.id === selectedId.value)
 const palette = computed(() => paletteOrder(props.registry))
 const tree = computed(() => { void bump.value; return buildTree(comps.value) })
 const layoutData = computed(() => ({ layout: { components: comps.value } } as FajrinaData))
+const internalModals = computed(()=> comps.value.filter(c=>getComponentType(c as UniversalComponent)==='Modal').map(c=>({id:c.id})))
+const effectivePages = computed(()=> props.pages ?? ['home'])
+const effectiveModals = computed(()=> (props.modals && props.modals.length ? props.modals : internalModals.value) as {id:string}[])
 
 function refresh() {
   lastEmittedRef.value = state.toFlatArray().map(c=>c.id).sort().join(',')
@@ -79,6 +85,17 @@ function patchSelected(patch: Record<string, unknown>) {
   if (!selected.value) return
   const merged = { ...(selected.value.props as object ?? {}), ...patch }
   state.patch(selected.value.id, { props: merged as Record<string, unknown> })
+  refresh()
+}
+function updateAction(behavior: string, extra: Record<string, unknown> = {}) {
+  if (!selected.value) return
+  const curA = ((selected.value.props as Record<string,unknown>)?.action as Record<string,unknown> ?? (selected.value as unknown as Record<string,unknown>).action as Record<string,unknown> ?? {}) as Record<string,unknown>
+  const base: Record<string, unknown> = { ...curA, behavior, ...extra }
+  const keep: Record<string,string[]> = { navigate:['behavior','target','params'], submit:['behavior','target','modalId','params'], externalLink:['behavior','href','target'], openModal:['behavior','modalId','title','message'], closeModal:['behavior','modalId'], toast:['behavior','message'], customEvent:['behavior','eventName','params'], back:['behavior'] }
+  const allowed = keep[behavior] ?? ['behavior','target','href','modalId','message','eventName','params']
+  for (const k of Object.keys(base)) if (!allowed.includes(k)) delete base[k]
+  const { behavior: _b, target: _t, href: _h, modalId: _m, message: _msg, eventName: _e, params: _p, action: _a, ...restProps } = selected.value.props as Record<string,unknown>
+  state.patch(selected.value.id, { props: { ...restProps, action: base } as Record<string,unknown>, action: base as unknown as UniversalComponent['action'] })
   refresh()
 }
 function patchStyle(css: string) {
@@ -168,7 +185,31 @@ function onNodeDrop(e: DragEvent, id: string) { e.preventDefault(); e.stopPropag
               </template>
               <template v-if="getComponentType(selected)==='Button'">
                 <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>label</span><input :value="String((selected.props as Record<string,unknown>)?.label ?? '')" @input="(e:Event)=>patchSelected({label:(e.target as HTMLInputElement).value})" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:12px;" /></label>
-                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>action.behavior</span><select :value="String((selected.props as Record<string,unknown>)?.behavior ?? (selected as unknown as Record<string,unknown>).action?.behavior ?? 'navigate')" @change="(e:Event)=>{ const v=(e.target as HTMLSelectElement).value; const cur=(selected!.props as Record<string,unknown> ?? {}); state.patch(selected!.id,{props:{...cur,behavior:v} as Record<string,unknown>} as Partial<UniversalComponent>); refresh() }" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:12px;"><option>navigate</option><option>submit</option><option>externalLink</option><option>back</option><option>toast</option></select></label>
+                <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>action.behavior</span><select :value="String(((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.behavior ?? (selected as unknown as Record<string,unknown>).action?.behavior ?? 'navigate')" @change="(e:Event)=>updateAction((e.target as HTMLSelectElement).value)" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:12px;"><option>navigate</option><option>submit</option><option>externalLink</option><option>back</option><option>openModal</option><option>closeModal</option><option>toast</option><option>customEvent</option></select></label>
+                <template v-if="String(((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.behavior ?? (selected as unknown as Record<string,unknown>).action?.behavior ?? 'navigate')==='navigate'">
+                  <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>target (page)</span><select :value="String((((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.target ?? (selected as unknown as Record<string,unknown>).action?.target ?? ''))" @change="(e:Event)=>updateAction('navigate',{target:(e.target as HTMLSelectElement).value})" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:12px;"><option value="">-- pilih page --</option><option v-for="p in effectivePages" :key="p" :value="p">{{ p }}</option></select></label>
+                </template>
+                <template v-else-if="String(((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.behavior ?? (selected as unknown as Record<string,unknown>).action?.behavior)==='externalLink'">
+                  <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>href</span><input :value="String((((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.href ?? ''))" @input="(e:Event)=>updateAction('externalLink',{href:(e.target as HTMLInputElement).value})" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:12px;" placeholder="https://example.com" /></label>
+                </template>
+                <template v-else-if="String(((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.behavior ?? (selected as unknown as Record<string,unknown>).action?.behavior)==='openModal'">
+                  <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>modalId</span><select :value="String((((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.modalId ?? ''))" @change="(e:Event)=>updateAction('openModal',{modalId:(e.target as HTMLSelectElement).value})" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:12px;"><option value="">-- pilih Modal --</option><option v-for="m in effectiveModals" :key="m.id" :value="m.id">{{ m.id.slice(-6) }}</option><option v-if="!effectiveModals.length" disabled>Belum ada Modal — buat komponen Modal dulu</option></select></label>
+                </template>
+                <template v-else-if="String(((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.behavior ?? (selected as unknown as Record<string,unknown>).action?.behavior)==='submit'">
+                  <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>On success</span><select :value="((((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.modalId ?? (selected as unknown as Record<string,unknown>).action?.modalId) ? 'openModal' : 'navigate')" @change="(e:Event)=>{ const v=(e.target as HTMLSelectElement).value; if(v==='openModal') updateAction('submit',{modalId: (effectiveModals[0]?.id ?? ''), target: undefined}); else updateAction('submit',{target: (effectivePages[0] ?? 'home'), modalId: undefined}) }" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:12px;"><option value="navigate">Redirect to page</option><option value="openModal">Open modal</option></select></label>
+                  <template v-if="(((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.modalId ?? (selected as unknown as Record<string,unknown>).action?.modalId)">
+                    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>modalId</span><select :value="String((((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.modalId ?? ''))" @change="(e:Event)=>updateAction('submit',{modalId:(e.target as HTMLSelectElement).value})" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:12px;"><option value="">-- pilih Modal --</option><option v-for="m in effectiveModals" :key="m.id" :value="m.id">{{ m.id.slice(-6) }}</option><option v-if="!effectiveModals.length" disabled>Belum ada Modal — buat komponen Modal dulu</option></select></label>
+                  </template>
+                  <template v-else>
+                    <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>target (page)</span><select :value="String((((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.target ?? (selected as unknown as Record<string,unknown>).action?.target ?? ''))" @change="(e:Event)=>updateAction('submit',{target:(e.target as HTMLSelectElement).value})" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:12px;"><option value="">-- pilih page --</option><option v-for="p in effectivePages" :key="p" :value="p">{{ p }}</option></select></label>
+                  </template>
+                </template>
+                <template v-else-if="String(((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.behavior ?? (selected as unknown as Record<string,unknown>).action?.behavior)==='toast'">
+                  <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>message</span><textarea :value="String((((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.message ?? ''))" @input="(e:Event)=>updateAction('toast',{message:(e.target as HTMLTextAreaElement).value})" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:12px;min-height:50px;"></textarea></label>
+                </template>
+                <template v-else-if="String(((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.behavior ?? (selected as unknown as Record<string,unknown>).action?.behavior)==='customEvent'">
+                  <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>eventName</span><input :value="String((((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.eventName ?? ''))" @input="(e:Event)=>updateAction('customEvent',{eventName:(e.target as HTMLInputElement).value})" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:12px;" /></label>
+                </template>
               </template>
               <template v-if="['Input','Select','Textarea'].includes(getComponentType(selected))">
                 <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>name</span><input :value="String((selected.props as Record<string,unknown>)?.name ?? '')" @input="(e:Event)=>patchSelected({name:(e.target as HTMLInputElement).value})" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:12px;" /></label>
@@ -191,7 +232,7 @@ function onNodeDrop(e: DragEvent, id: string) { e.preventDefault(); e.stopPropag
               <template v-if="getComponentType(selected)==='Grid'">
                 <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>columns</span><input type="number" :value="String((selected.props as Record<string,unknown>)?.columns ?? 2)" @input="(e:Event)=>patchSelected({columns:parseInt((e.target as HTMLInputElement).value)||2})" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:12px;" /></label>
               </template>
-              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>props (JSON)</span><textarea :value="JSON.stringify(selected.props ?? {}, null, 2)" @input="(e:Event)=>{ try{ const p=JSON.parse((e.target as HTMLTextAreaElement).value); state.patch(selected!.id,{props:p} as Partial<UniversalComponent>); refresh() } catch{} }" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:11px;min-height:70px;font-family:monospace;"></textarea></label>
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#9aa3c7;"><span>props (JSON)</span><textarea :value="JSON.stringify({ ...(selected.props ?? {}), ...((selected as unknown as Record<string,unknown>).action ? {action:(selected as unknown as Record<string,unknown>).action} : {}) }, null, 2)" @input="(e:Event)=>{ try{ const p=JSON.parse((e.target as HTMLTextAreaElement).value) as Record<string,unknown>; const act=p.action as Record<string,unknown>|undefined; const rest={...p}; delete rest.action; state.patch(selected!.id,{props:{...(selected.props as object ?? {}),...rest,...(act?{action:act}:{})} as Record<string,unknown>, ...(act?{action: act as unknown as UniversalComponent['action']}:{})}); refresh() } catch{} }" style="width:100%;background:#0f1220;border:1px solid #2c3354;color:#e6e9f5;border-radius:6px;padding:6px 8px;font-size:11px;min-height:70px;font-family:monospace;"></textarea></label>
             </div>
           </div>
 

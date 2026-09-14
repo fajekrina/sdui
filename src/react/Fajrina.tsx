@@ -126,36 +126,42 @@ function UniversalNode({
   const [formData, setFormData] = useState<Record<string, string>>({})
 
   const emit = (extra?: Record<string, unknown>) => {
-    const action = (props.action as string | undefined) ?? (props.behavior as string | undefined) ?? (comp.action?.behavior as string | undefined) ?? (comp.action?.action as string | undefined)
-    const target = (props.target as string | undefined) ?? (comp.action?.target as string | undefined)
+    const propsActionObj = (props.action && typeof props.action === 'object' ? props.action as Record<string, unknown> : undefined) ?? ((props as Record<string, unknown>).action && typeof (props as Record<string,unknown>).action === 'object' ? (props as Record<string,unknown>).action as Record<string,unknown> : undefined)
+    const compActionObj = comp.action as unknown as Record<string, unknown> | undefined
+    const actionObj = propsActionObj ?? compActionObj
+    const behavior = (actionObj?.behavior as string | undefined) ?? (typeof props.action === 'string' ? props.action as string : undefined) ?? (props.behavior as string | undefined) ?? (compActionObj?.behavior as string | undefined) ?? (compActionObj?.action as string | undefined)
+    const action = behavior
+    const target = (actionObj?.target as string | undefined) ?? (props.target as string | undefined) ?? (compActionObj?.target as string | undefined)
     const ev: FajrinaActionEvent = {
       behavior: action,
       action,
       target,
       data: extra,
-      params: (comp.action?.params as Record<string, unknown> | undefined) ?? (props.params as Record<string, unknown> | undefined),
+      params: (actionObj?.params as Record<string, unknown> | undefined) ?? (compActionObj?.params as Record<string, unknown> | undefined) ?? (props.params as Record<string, unknown> | undefined) ?? ((props as Record<string,unknown>).params as Record<string,unknown> | undefined),
       sourceComponent: comp
     }
     onAction?.(ev)
     if (action === 'externalLink') {
-      const href = (props.href as string | undefined) ?? (comp.action?.href as string | undefined) ?? (props.url as string | undefined)
+      const href = (actionObj?.href as string | undefined) ?? (compActionObj?.href as string | undefined) ?? (props.href as string | undefined) ?? (props.url as string | undefined) ?? ((props as Record<string,unknown>).href as string | undefined)
       if (href) window.open(href, '_blank', 'noopener')
     }
     if (action === 'back') window.history.back()
     if (action === 'toast') {
-      const msg = String(props.message ?? comp.action?.message ?? props.content ?? 'Toast')
+      const msg = String(actionObj?.message ?? compActionObj?.message ?? props.message ?? props.content ?? 'Toast')
       onToast?.(msg)
     }
     if (action === 'openModal') {
-      const modalId = String(comp.action?.modalId ?? props.target ?? comp.id)
-      onOpenModal?.({ id: modalId, title: String(props.title ?? ''), message: String(props.message ?? ''), content: String(props.content ?? '') })
+      const modalId = String(actionObj?.modalId ?? compActionObj?.modalId ?? props.target ?? (props as Record<string,unknown>).target ?? comp.id)
+      const title = String(actionObj?.title ?? props.title ?? '')
+      const message = String(actionObj?.message ?? props.message ?? '')
+      onOpenModal?.({ id: modalId, title, message, content: String(props.content ?? '') })
     }
     if (action === 'closeModal') {
       onCloseModal?.()
     }
-    if (action === 'customEvent' && (props.eventName || comp.action?.eventName)) {
-      const name = String(props.eventName ?? comp.action?.eventName ?? 'customEvent')
-      document.dispatchEvent(new CustomEvent(name, { detail: (comp.action?.params ?? props.params) as Record<string, unknown> }))
+    if (action === 'customEvent' && (actionObj?.eventName || compActionObj?.eventName || props.eventName)) {
+      const name = String(actionObj?.eventName ?? compActionObj?.eventName ?? props.eventName ?? 'customEvent')
+      document.dispatchEvent(new CustomEvent(name, { detail: (actionObj?.params ?? compActionObj?.params ?? props.params) as Record<string, unknown> }))
       onToast?.(`Event ${name} dispatched`)
     }
   }
