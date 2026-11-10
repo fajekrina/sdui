@@ -1,0 +1,538 @@
+{
+  "pageId": "merchant_demo-seat-selection",
+  "pageKey": "seat-selection",
+  "merchantId": "merchant_demo",
+  "status": "PUBLISHED",
+  "schemaVersion": "1.0",
+  "version": 1,
+  "createdAt": "2026-09-08T00:00:00",
+  "updatedAt": "2026-09-08T00:00:00",
+  "layout": {
+    "type": "Container",
+    "title": "Seat Selection",
+    "subtitle": "Choose your seat",
+    "components": [
+      {
+        "id": "01JQ2D7KX87AXE3YPCJPXREG56",
+        "component": "Container",
+        "parentId": null,
+        "props": {
+          "as": "div"
+        },
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "gap": "20px",
+          "padding": "24px",
+          "maxWidth": "900px",
+          "margin": "0 auto",
+          "backgroundColor": "#ffffff"
+        },
+        "order": 0
+      },
+      {
+        "id": "01JQ2D7KX8XVP513N0JVZH5XVE",
+        "component": "Heading",
+        "parentId": "01JQ2D7KX87AXE3YPCJPXREG56",
+        "props": {
+          "content": "Pilih Kursi Kamu",
+          "level": 2
+        },
+        "style": {
+          "color": "#0f172a",
+          "fontSize": "28px",
+          "fontWeight": "700",
+          "textAlign": "center"
+        },
+        "order": 1
+      },
+      {
+        "id": "01JQ2D7KX888NMQ9D5N2R5Q4Z8",
+        "component": "Text",
+        "parentId": "01JQ2D7KX87AXE3YPCJPXREG56",
+        "props": {
+          "content": "Tap kursi untuk melanjutkan ke checkout. Kursi terpilih akan diteruskan sebagai seatId.",
+          "tag": "p"
+        },
+        "style": {
+          "color": "#64748b",
+          "fontSize": "14px",
+          "lineHeight": "1.5",
+          "textAlign": "center",
+          "marginBottom": "8px"
+        },
+        "order": 2
+      },
+      {
+        "id": "01JQ2D7KX8P60XNQN30FYQ5754",
+        "component": "Container",
+        "parentId": "01JQ2D7KX87AXE3YPCJPXREG56",
+        "props": {
+          "as": "div"
+        },
+        "style": {
+          "display": "grid",
+          "gridTemplateColumns": "repeat(4, minmax(0, 1fr))",
+          "gridGap": "12px",
+          "padding": "16px",
+          "backgroundColor": "#f8fafc",
+          "borderRadius": "12px",
+          "border": "1px solid #e2e8f0"
+        },
+        "order": 3
+      },
+      {
+        "id": "01JQ2D7KX8KWJJYF448QQYR6MD",
+        "component": "Button",
+        "parentId": "01JQ2D7KX8P60XNQN30FYQ5754",
+        "props": {
+          "label": "A1",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "checkout",
+            "params": {
+              "seatId": "A1"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "16px",
+          "paddingRight": "8px",
+          "paddingBottom": "16px",
+          "paddingLeft": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "width": "100%"
+        },
+        "order": 4
+      },
+      {
+        "id": "01JQ2D7KX8E5HQKNSA99FA7H0M",
+        "component": "Button",
+        "parentId": "01JQ2D7KX8P60XNQN30FYQ5754",
+        "props": {
+          "label": "A2",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "checkout",
+            "params": {
+              "seatId": "A2"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "16px",
+          "paddingRight": "8px",
+          "paddingBottom": "16px",
+          "paddingLeft": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "width": "100%"
+        },
+        "order": 5
+      },
+      {
+        "id": "01JQ2D7KX86BJYYC8MKJYR1KGX",
+        "component": "Button",
+        "parentId": "01JQ2D7KX8P60XNQN30FYQ5754",
+        "props": {
+          "label": "A3",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "checkout",
+            "params": {
+              "seatId": "A3"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "16px",
+          "paddingRight": "8px",
+          "paddingBottom": "16px",
+          "paddingLeft": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "width": "100%"
+        },
+        "order": 6
+      },
+      {
+        "id": "01JQ2D7KX8S5SZ4CK79ZD90XY5",
+        "component": "Button",
+        "parentId": "01JQ2D7KX8P60XNQN30FYQ5754",
+        "props": {
+          "label": "B1",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "checkout",
+            "params": {
+              "seatId": "B1"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "16px",
+          "paddingRight": "8px",
+          "paddingBottom": "16px",
+          "paddingLeft": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "width": "100%"
+        },
+        "order": 7
+      },
+      {
+        "id": "01JQ2D7KX8G2X8XQKRR0N852NZ",
+        "component": "Button",
+        "parentId": "01JQ2D7KX8P60XNQN30FYQ5754",
+        "props": {
+          "label": "B2",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "checkout",
+            "params": {
+              "seatId": "B2"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "16px",
+          "paddingRight": "8px",
+          "paddingBottom": "16px",
+          "paddingLeft": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "width": "100%"
+        },
+        "order": 8
+      },
+      {
+        "id": "01JQ2D7KX8XWTQ67KBYAPWT7G9",
+        "component": "Button",
+        "parentId": "01JQ2D7KX8P60XNQN30FYQ5754",
+        "props": {
+          "label": "B3",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "checkout",
+            "params": {
+              "seatId": "B3"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "16px",
+          "paddingRight": "8px",
+          "paddingBottom": "16px",
+          "paddingLeft": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "width": "100%"
+        },
+        "order": 9
+      },
+      {
+        "id": "01JQ2D7KX8HFXB7MY4DPSKQSJG",
+        "component": "Button",
+        "parentId": "01JQ2D7KX8P60XNQN30FYQ5754",
+        "props": {
+          "label": "C1",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "checkout",
+            "params": {
+              "seatId": "C1"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "16px",
+          "paddingRight": "8px",
+          "paddingBottom": "16px",
+          "paddingLeft": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "width": "100%"
+        },
+        "order": 10
+      },
+      {
+        "id": "01JQ2D7KX8N45TQBJAQV95C34W",
+        "component": "Button",
+        "parentId": "01JQ2D7KX8P60XNQN30FYQ5754",
+        "props": {
+          "label": "C2",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "checkout",
+            "params": {
+              "seatId": "C2"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "16px",
+          "paddingRight": "8px",
+          "paddingBottom": "16px",
+          "paddingLeft": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "width": "100%"
+        },
+        "order": 11
+      },
+      {
+        "id": "01JQ2D7KX87D4E9E0SPD47G6PH",
+        "component": "Button",
+        "parentId": "01JQ2D7KX8P60XNQN30FYQ5754",
+        "props": {
+          "label": "C3",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "checkout",
+            "params": {
+              "seatId": "C3"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "16px",
+          "paddingRight": "8px",
+          "paddingBottom": "16px",
+          "paddingLeft": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "width": "100%"
+        },
+        "order": 12
+      },
+      {
+        "id": "01JQ2D7KX8K8VBC8DB1KSY5Q2Y",
+        "component": "Button",
+        "parentId": "01JQ2D7KX8P60XNQN30FYQ5754",
+        "props": {
+          "label": "D1",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "checkout",
+            "params": {
+              "seatId": "D1"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "16px",
+          "paddingRight": "8px",
+          "paddingBottom": "16px",
+          "paddingLeft": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "width": "100%"
+        },
+        "order": 13
+      },
+      {
+        "id": "01JQ2D7KX8E603WK38NP80TPNZ",
+        "component": "Button",
+        "parentId": "01JQ2D7KX8P60XNQN30FYQ5754",
+        "props": {
+          "label": "D2",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "checkout",
+            "params": {
+              "seatId": "D2"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "16px",
+          "paddingRight": "8px",
+          "paddingBottom": "16px",
+          "paddingLeft": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "width": "100%"
+        },
+        "order": 14
+      },
+      {
+        "id": "01JQ2D7KX8FDEZ1AFJMY5ZS1BV",
+        "component": "Button",
+        "parentId": "01JQ2D7KX8P60XNQN30FYQ5754",
+        "props": {
+          "label": "D3",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "checkout",
+            "params": {
+              "seatId": "D3"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "16px",
+          "paddingRight": "8px",
+          "paddingBottom": "16px",
+          "paddingLeft": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "width": "100%"
+        },
+        "order": 15
+      },
+      {
+        "id": "01JQ2D7KX8WYMNZQX2TB2P532R",
+        "component": "Button",
+        "parentId": "01JQ2D7KX87AXE3YPCJPXREG56",
+        "props": {
+          "label": "Kembali",
+          "type": "button",
+          "action": {
+            "behavior": "back"
+          }
+        },
+        "style": {
+          "backgroundColor": "#f1f5f9",
+          "color": "#0f172a",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "10px",
+          "paddingRight": "20px",
+          "paddingBottom": "10px",
+          "paddingLeft": "20px",
+          "fontSize": "14px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "marginTop": "8px",
+          "width": "100%"
+        },
+        "order": 16
+      }
+    ]
+  }
+}

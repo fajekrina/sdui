@@ -1,7 +1,7 @@
 # Desain Sistem: @fajekrina/sdui sebagai Framework Berlapis
 
 > Status: desain siap implementasi · Tanggal: 2026-11-10 · Versi paket saat ini: 0.2.0
-> Turunan dari `MIGRASI-FRAMEWORK-BERLAPIS.md` (rencana fase). Dokumen ini mendefinisikan **arsitektur, kontrak, dan gerbang kualitas**-nya.
+> Turunan dari `docs/MIGRASI-FRAMEWORK-BERLAPIS.md` (rencana fase). Dokumen ini mendefinisikan **arsitektur, kontrak, dan gerbang kualitas**-nya.
 > Pasangan backend: `DESAIN-SISTEM-SDUI.md` (3 artefak blob, S1 + A1, payload beku per release).
 > Pola: **framework-agnostic core + port yang di-inject + adapter tipis** (ports & adapters / headless core).
 
@@ -32,7 +32,7 @@
 | Yang sudah benar | resolver style tunggal (`buildLayoutStyle`, `applyThemeToStyle`), validasi + `SduiError`, `toErrorPage`, last-good cache, verifikasi Ed25519, builder headless tanpa DOM | `src/core/*`, `src/builder/builder.ts` |
 | Adapter vanilla | diklaim README, belum ada sebagai renderer | `README.md:14` |
 | Dokumentasi paket | README memakai nama `fajrina-sdui`, paket sebenarnya `@fajekrina/sdui` | `README.md`, `package.json` |
-| Test | vitest: core (tree/style/validate/theme/cache/sign) + React; belum ada paritas React-vs-Vue | `tests/` |
+| Test | vitest: core (tree/style/validate/theme/cache/sign) + React; belum ada paritas React-vs-Vue | `tests` |
 
 Kesimpulan: core sudah memegang **style dan validasi**, tetapi **perilaku** (aksi, form, toast/modal) dan **keputusan render** (tag, atribut) masih tinggal di adapter, ditulis dua kali.
 
@@ -226,16 +226,18 @@ export interface RenderNode {
   attrs: Record<string, string | number | boolean>   // sudah disanitasi (href/src lolos allow-list)
   style: Record<string, string>                 // final: preset → shared/token → inline sudah diterapkan
   text?: string                                 // isi teks (selalu di-escape adapter, tidak pernah innerHTML)
-  options?: Array<{ label: string; value: string }>   // khusus select
   field?: { formId: string; name: string }      // input/select/textarea terikat ke UI store
-  action?: { trigger: 'click' | 'submit' }      // ada → adapter memasang handler ke runtime.dispatch
-  children: RenderNode[]
+  on?: { click?: string; submit?: string }      // kunci handler → runtime.handle(key): dispatch:<id> | submit:<formId> | closeModal
+  preventDefault?: boolean
+  stopPropagation?: boolean
+  children: RenderNode[]                        // <option> select juga anak biasa (element 'option')
 }
 
 export interface RenderResult {
-  root: RenderNode | null
+  nodes: RenderNode[]                           // root bisa lebih dari satu (builder membuat banyak root)
+  overlays: RenderNode[]                        // toast + modal dari UI store
   errors: SduiError[]                           // mode warn: render tetap jalan
-  failed: boolean                               // mode strict + error → root = halaman error
+  failed: boolean                               // mode strict + error → nodes = halaman error
 }
 ```
 
@@ -474,7 +476,7 @@ Urutan ini sengaja menaruh pagar (Fase 0) sebelum refactor: tanpa snapshot parit
 | `sdui_bounds` | `DEFAULT_BOUNDS` core = bounds v1; nilai lain lewat opsi `bounds` |
 | A2 (manifest + 3 artefak) nanti | resolver core yang sama merakit di client; loader ditambah langkah ambil artefak paralel |
 
-## 12. Penyesuaian terhadap `MIGRASI-FRAMEWORK-BERLAPIS.md` (best practice)
+## 12. Penyesuaian terhadap `docs/MIGRASI-FRAMEWORK-BERLAPIS.md` (best practice)
 
 1. **Ditambah kontrak RenderNode + registry core** (§4.3). Rencana lama hanya memindah aksi ke core; tag, atribut, dan 18 cabang render tetap terduplikasi di adapter, padahal itu sumber drift visual terbesar berikutnya.
 2. **Ditambah UI store** (§4.6) untuk toast, modal, dan form, sehingga `document.querySelector` di Vue hilang dan perilaku form identik di semua adapter.
@@ -489,7 +491,28 @@ Urutan ini sengaja menaruh pagar (Fase 0) sebelum refactor: tanpa snapshot parit
 11. **Fase 2 lama dipecah** menjadi Fase 2 (view-model + keamanan) dan Fase 3 (vanilla + builder), agar tiap rilis minor punya kriteria selesai yang bisa diuji.
 12. **`COMPONENT_DEF` / `sdui_releases` di Fase 2 lama** dipindah ke dokumen backend; framework hanya memakai hasilnya (palette, ETag, signing key).
 
-## 13. Risiko
+## 13. Status implementasi (0.3.0, 2026-11-10)
+
+Fase 0–3 dieksekusi sekaligus dalam rilis 0.3.0 (lihat `CHANGELOG.md`, `HANDOFF.md`).
+
+| Item desain | Status | Catatan |
+|---|---|---|
+| Port + `./browser` | ✅ | `src/core/ports.ts`, `src/browser/index.ts` |
+| Dispatcher + preventDefault + policy gate + `api` chain | ✅ | `src/core/actions.ts`, `src/core/runtime.ts` |
+| UI store (toast/modal/form) | ✅ | `src/core/ui-store.ts`; error field tampil di bawah field |
+| Registry + RenderNode | ✅ | `src/core/registry.ts`, `src/core/view-model.ts` |
+| Loader ETag + verify ulang cache | ✅ | `src/core/loader.ts` |
+| `./vanilla` | ✅ | `src/vanilla/index.ts` |
+| Builder: pratinjau == client, palette registry | ✅ | `previewNode`, mode Preview, panel validasi |
+| Gate kemurnian core | ✅ (test, bukan ESLint) | `tests/core-guard.test.ts`; pengecualian eksplisit: `loadPageWithCache` (deprecated) |
+| Paritas React = Vue = vanilla | ✅ | `tests/parity.test.tsx`, 4 fixture |
+| Budget bundle core < 10 KB gzip | ❌ | terukur ~12,9 KB; belum ada `size-limit` |
+| `publint` / `attw` / coverage ≥ 80% / SSR `renderToString` | ⏳ | belum dipasang di CI |
+| Fase 4 (README per entry, TSDoc, SECURITY.md, galeri, 1.0) | ⏳ | README utama sudah diperbarui |
+
+Deviasi dari desain: `Image.src` hanya dicek skemanya (http/https/relatif/`data:image`), bukan allow-list domain, karena data contoh memakai CDN gambar di luar `allowedDomains`.
+
+## 14. Risiko
 
 - **RenderNode terlalu sempit** untuk kebutuhan styling khusus framework (mis. class Tailwind konsumen). Mitigasi: `className` di wrapper + `attrs['data-sdui-type']` untuk selektor; style tetap inline.
 - **Perubahan urutan efek** (`onAction` lalu default yang bisa dibatalkan) bisa mengejutkan konsumen yang mengandalkan efek terjadi lebih dulu. Mitigasi: urutan default sama seperti hari ini; yang baru hanya kemampuan membatalkan.

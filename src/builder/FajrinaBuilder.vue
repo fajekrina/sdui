@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import Fajrina from '../vue/Fajrina.vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import Fajrina from '../vue/Fajrina'
 import BuilderNode from './BuilderNode.vue'
-import { createBuilderState, cssTextToStyle, styleToCssText, genId } from './builder'
+import { createBuilderState, cssTextToStyle, styleToCssText, defaultPropsFor, builderPalette, findComponentJsonRange, type RegistryComponents } from './builder'
+import { validateData } from '../core/validate'
 import { buildLayoutStyle } from '../core/style'
 import { buildTree, type TreeNode } from '../core/tree'
 import { getComponentType } from '../core/types'
 import type { FajrinaData, UniversalComponent } from '../core/types'
 import { normalizeToLayout } from '../core/types'
 
-export type RegistryComponents = Record<string, { props?: Record<string, unknown> }>
 
 const props = defineProps<{
   data?: FajrinaData
@@ -27,13 +27,6 @@ const emit = defineEmits<{
   (e: 'update:modelValue', v: unknown): void
 }>()
 
-const FALLBACK_ORDER = ['Container','Heading','Text','Button','Image','Input','Select','Textarea','Form','Link','Flex','Grid','Card','Hero','Divider','Space','Modal']
-function paletteOrder(reg?: RegistryComponents): string[] {
-  const keys = reg ? Object.keys(reg) : FALLBACK_ORDER
-  const ordered = FALLBACK_ORDER.filter(k => keys.includes(k))
-  const rest = keys.filter(k => !ordered.includes(k))
-  return [...ordered, ...rest]
-}
 function dotColor(t: string) {
   if (t==='Container') return '#6c8cff'
   if (t==='Heading') return '#f59e0b'
@@ -54,10 +47,41 @@ const lastEmittedRef = ref<string | null>(null)
 
 const comps = computed(() => { void bump.value; return state.toFlatArray() })
 const selected = computed(() => comps.value.find(c => c.id === selectedId.value) ?? null)
-const palette = computed(() => paletteOrder(props.registry))
+const palette = computed(() => builderPalette(props.registry))
+const previewMode = ref(false)
 const tree = computed(() => { void bump.value; return buildTree(comps.value) })
 const layoutData = computed(() => ({ layout: { components: comps.value } } as FajrinaData))
+const issues = computed(() => validateData(layoutData.value))
 const internalModals = computed(()=> comps.value.filter(c=>getComponentType(c as UniversalComponent)==='Modal').map(c=>({id:c.id})))
+// JSON panel: collapse + selected-component highlight (band positioned by line → metrics must match the textarea)
+const JSON_LINE = 18
+const JSON_PAD = 10
+const jsonOpen = ref(true)
+const jsonScroll = ref(0)
+const jsonRef = ref<HTMLTextAreaElement | null>(null)
+const jsonRange = computed(() => findComponentJsonRange(jsonText.value, selectedId.value))
+const jsonBadge = computed(() => {
+  const s = selected.value
+  if (!s) return ''
+  const r = jsonRange.value
+  return `${String(getComponentType(s))} · ${s.id.slice(-6)}${r ? ` · baris ${r.startLine + 1}–${r.endLine + 1}` : ' · tidak ditemukan di JSON'}`
+})
+const jsonBandStyle = computed(() => {
+  const r = jsonRange.value
+  if (!r) return {}
+  return { top: `${JSON_PAD + r.startLine * JSON_LINE - jsonScroll.value}px`, height: `${(r.endLine - r.startLine + 1) * JSON_LINE}px` }
+})
+// canvas selection → scroll the JSON panel to the selected component
+watch([selectedId, jsonOpen], async () => {
+  await nextTick()
+  const ta = jsonRef.value
+  const r = jsonRange.value
+  if (!jsonOpen.value || !ta || !r) return
+  const top = JSON_PAD + r.startLine * JSON_LINE
+  const bottom = JSON_PAD + (r.endLine + 1) * JSON_LINE
+  if (top < ta.scrollTop || bottom > ta.scrollTop + ta.clientHeight) ta.scrollTop = Math.max(0, top - JSON_LINE * 2)
+  jsonScroll.value = ta.scrollTop
+})
 const effectivePages = computed(()=> props.pages ?? ['home'])
 const effectiveModals = computed(()=> (props.modals && props.modals.length ? props.modals : internalModals.value) as {id:string}[])
 
@@ -68,14 +92,7 @@ function refresh() {
   bump.value++
 }
 function add(type: string, parentId: string | null = null) {
-  const def = props.registry?.[type]?.props as Record<string, unknown> | undefined
-  const defaults: Record<string, unknown> = {}
-  if (def) { for (const [k,v] of Object.entries(def)) { if (Array.isArray(v) && v.length) defaults[k]=v[0]; else if (typeof v==='object' && v!==null && 'default' in (v as Record<string,unknown>)) defaults[k]=(v as Record<string,unknown>).default; else if (typeof v==='string'||typeof v==='number'||typeof v==='boolean') defaults[k]=v } }
-  if (type==='Heading' && !defaults.content) defaults.content='Heading'
-  if (type==='Text' && !defaults.content) defaults.content='Text'
-  if (type==='Button' && !defaults.label) defaults.label='Button'
-  if (type==='Image' && !defaults.src) defaults.src='https://picsum.photos/400/200'
-  if ((type==='Input'||type==='Select'||type==='Textarea') && !defaults.name) defaults.name=type.toLowerCase()+'_'+Math.random().toString(36).slice(2,5)
+  const defaults = defaultPropsFor(type, props.registry)
   const added = state.add(type, parentId)
   state.patch(added.id, { props: defaults, component: type } as Partial<UniversalComponent>)
   selectedId.value = added.id
@@ -134,6 +151,7 @@ function onNodeDrop(e: DragEvent, id: string) { e.preventDefault(); e.stopPropag
       <strong style="font-size:14px;">Fajrina Builder</strong>
       <span v-if="merchantId" style="font-size:12px;color:#9aa3c7;">{{ merchantId }}/{{ pageKey ?? '' }}</span>
       <span style="margin-left:auto;font-size:12px;color:#3ad29f;">{{ status }}</span>
+      <button @click="previewMode=!previewMode" style="height:28px;padding:0 12px;border-radius:6px;border:1px solid #2c3354;background:#2c3354;color:#e6e9f5;cursor:pointer;font-size:13px;">{{ previewMode ? 'Edit' : 'Preview' }}</button>
       <button @click="doSave" style="height:28px;padding:0 12px;border-radius:6px;border:1px solid #3ad29f;background:#3ad29f;color:#0f1220;cursor:pointer;font-size:13px;">Save</button>
       <button @click="doPublish" style="height:28px;padding:0 12px;border-radius:6px;border:1px solid #f59e0b;background:#f59e0b;color:#fff;cursor:pointer;font-size:13px;">Publish</button>
     </header>
@@ -151,12 +169,16 @@ function onNodeDrop(e: DragEvent, id: string) { e.preventDefault(); e.stopPropag
 
       <div style="overflow:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">
         <div id="fajrina-canvas-wrap" style="flex:1;background:#fff;color:#0f172a;border-radius:12px;border:1px solid #e2e8f0;min-height:520px;padding:24px;overflow:auto;" @dragover.prevent @drop="(e:DragEvent)=>{ e.preventDefault(); e.stopPropagation(); const t=e.dataTransfer?.getData('text/plain'); if(t) add(t,null) }" @click="selectedId=null">
-          <div v-if="comps.length===0" style="border:2px dashed #cbd5e1;border-radius:10px;padding:40px;text-align:center;color:#64748b;font-size:13px;">Canvas kosong — drag komponen dari palet kiri ke sini.<br/>Drop ke area kosong = root, drop ke Container/Form = child.</div>
+          <Fajrina v-if="previewMode" :data="layoutData as never" />
+          <div v-else-if="comps.length===0" style="border:2px dashed #cbd5e1;border-radius:10px;padding:40px;text-align:center;color:#64748b;font-size:13px;">Canvas kosong — drag komponen dari palet kiri ke sini.<br/>Drop ke area kosong = root, drop ke Container/Form = child.</div>
           <template v-else>
             <BuilderNode v-for="node in tree" :key="node.id" :node="node as never" :selectedId="selectedId" :dragOverId="dragOverId" @select="selectedId=$event" @dragover="dragOverId=$event" @drop="(p)=>add(p.type,p.id)" />
           </template>
         </div>
-        <div style="display:none;"><Fajrina :data="layoutData as never" @action="()=>{}" /></div>
+        <div v-if="issues.length" data-testid="builder-issues" style="background:#2a1520;border:1px solid #ff6b6b;border-radius:8px;padding:8px;font-size:12px;color:#ffb4b4;">
+          <strong>{{ issues.length }} validation issue(s)</strong>
+          <ul style="margin:4px 0 0 16px;padding:0;"><li v-for="(e,i) in issues.slice(0,20)" :key="i">[{{ e.code }}] {{ e.path ? e.path + ' — ' : '' }}{{ e.message }}</li></ul>
+        </div>
       </div>
 
       <aside style="background:#1a1f35;border-left:1px solid #2c3354;overflow:auto;padding:12px;">
@@ -252,10 +274,18 @@ function onNodeDrop(e: DragEvent, id: string) { e.preventDefault(); e.stopPropag
       </aside>
     </div>
 
-    <div style="height:260px;background:#1a1f35;border-top:1px solid #2c3354;display:flex;flex-direction:column;">
-      <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#232a45;border-bottom:1px solid #2c3354;"><span style="font-size:12px;color:#9aa3c7;">JSON — flat array (2-way sync)</span><button @click="()=>{ try{ jsonText=JSON.stringify(JSON.parse(jsonText),null,2) } catch{} }" style="margin-left:auto;height:24px;padding:0 8px;font-size:11px;border-radius:6px;border:1px solid #2c3354;background:#0f1220;color:#e6e9f5;cursor:pointer;">Format</button></div>
-      <textarea :value="jsonText" @input="(e:Event)=>onJsonEdit((e.target as HTMLTextAreaElement).value)" spellcheck="false" style="flex:1;background:#0f1220;color:#e6e9f5;border:0;padding:10px;font-family:monospace;font-size:12px;resize:none;outline:none;"></textarea>
-      <div v-if="jsonError" style="font-size:11px;color:#ff6b6b;padding:4px 8px;">{{ jsonError }}</div>
+    <div :style="{ height: jsonOpen ? '260px' : 'auto' }" style="background:#1a1f35;border-top:1px solid #2c3354;display:flex;flex-direction:column;">
+      <div :style="{ borderBottom: jsonOpen ? '1px solid #2c3354' : '0' }" style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#232a45;">
+        <button @click="jsonOpen = !jsonOpen" :aria-expanded="jsonOpen" aria-controls="sdui-builder-json" :title="jsonOpen ? 'Tutup JSON' : 'Buka JSON'" style="height:24px;width:28px;padding:0 8px;font-size:11px;border-radius:6px;border:1px solid #2c3354;background:#0f1220;color:#e6e9f5;cursor:pointer;">{{ jsonOpen ? '▾' : '▸' }}</button>
+        <span style="font-size:12px;color:#9aa3c7;">JSON — flat array (2-way sync)</span>
+        <span v-if="selected" :style="{ color: jsonRange ? '#c7d2fe' : '#9aa3c7', background: jsonRange ? 'rgba(108,140,255,.18)' : 'transparent' }" style="font-size:11px;border:1px solid #6c8cff;border-radius:999px;padding:1px 8px;display:inline-flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:999px;background:#6c8cff;"></span>{{ jsonBadge }}</span>
+        <button v-if="jsonOpen" @click="()=>{ try{ jsonText=JSON.stringify(JSON.parse(jsonText),null,2) } catch{} }" style="margin-left:auto;height:24px;padding:0 8px;font-size:11px;border-radius:6px;border:1px solid #2c3354;background:#0f1220;color:#e6e9f5;cursor:pointer;">Format</button>
+      </div>
+      <div v-if="jsonOpen" id="sdui-builder-json" style="position:relative;flex:1;min-height:0;background:#0f1220;overflow:hidden;">
+        <div v-if="jsonRange" aria-hidden="true" :style="jsonBandStyle" style="position:absolute;left:0;right:0;background:rgba(108,140,255,.14);border-left:3px solid #6c8cff;pointer-events:none;"></div>
+        <textarea ref="jsonRef" :value="jsonText" @input="(e:Event)=>onJsonEdit((e.target as HTMLTextAreaElement).value)" @scroll="(e:Event)=>{ jsonScroll = (e.target as HTMLTextAreaElement).scrollTop }" spellcheck="false" wrap="off" style="position:absolute;inset:0;width:100%;height:100%;box-sizing:border-box;background:transparent;color:#e6e9f5;border:0;padding:10px;font-family:monospace;font-size:12px;line-height:18px;white-space:pre;overflow:auto;resize:none;outline:none;"></textarea>
+      </div>
+      <div v-if="jsonOpen && jsonError" style="font-size:11px;color:#ff6b6b;padding:4px 8px;">{{ jsonError }}</div>
     </div>
   </div>
 </template>

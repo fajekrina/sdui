@@ -1,0 +1,76 @@
+# Changelog — @fajekrina/sdui
+
+Semua perubahan penting paket ini dicatat di sini. Format mengikuti Keep a Changelog;
+versi mengikuti Semantic Versioning (0.x: breaking change boleh di minor dengan catatan jelas).
+
+## [0.3.0] — 2026-11-10
+
+Eksekusi `DESAIN-FRAMEWORK-SDUI.md` Fase 0–3 (core memegang perilaku + RenderNode + adapter ketiga + builder).
+
+### Ditambahkan
+- **Runtime headless** `createRuntime()` — `load` / `render` / `handle` / `dispatch` / `submit` / state UI + `subscribe`.
+- **Ports** (`core/ports`): storage, network, crypto, navigation, events, logger; default aman SSR/test (memori, no-op).
+- Entry **`@fajekrina/sdui/browser`** (`browserPorts()`: localStorage, fetch + `If-None-Match`, WebCrypto, window/document).
+- Entry **`@fajekrina/sdui/vanilla`** (`mount(el, options)`), adapter ketiga.
+- **Builder — panel JSON** (React & Vue): tombol collapse ▾/▸ untuk buka/tutup panel; komponen yang dipilih di canvas
+  disorot di JSON (pita biru + badge `Tipe · id · baris a–b`, auto-scroll). Helper headless `findComponentJsonRange(text, id)`.
+- **RenderNode + registry** (`core/view-model`, `core/registry`): elemen, atribut tersanitasi, style final, binding field, wiring event diputuskan sekali di core.
+- **Dispatcher aksi** (`core/actions`): `resolveAction` (normalisasi alias legacy), `onAction` → efek default yang bisa dibatalkan `event.preventDefault()`, cek policy sebelum efek, aksi `api` dengan rantai `onSuccess/onError` (≤ `maxChainDepth` 4).
+- **UI store**: toast, modal, nilai + error form (validasi `required/minLength/maxLength/email/pattern`), error tampil di bawah field.
+- **Loader** (`core/loader`): ETag/304, last-good cache, verifikasi envelope per `keyId` (termasuk isi cache), `verify.required` fail-closed.
+- `mergePolicy`: policy aplikasi = batas atas, policy payload hanya mempersempit.
+- Props React/Vue baru: `source`, `ports`, `verify`, `runtime`, `bounds`, `onLoad` / `@load`.
+- `browserNetwork` default base `/api/universal/v1` (backend universal-service kini berversi); pesan error loader dibaca dari `errorMessage` (kontrak error backend baru), fallback `error`.
+- Builder: pratinjau komponen memakai view-model core (== client), mode **Preview** penuh, panel validasi (validator yang sama dengan client/backend), palette dari registry core atau `registry` konsumen.
+- Tes: gerbang kemurnian core, paritas React = Vue = vanilla (4 fixture termasuk 3 halaman `merchant_demo`), runtime, loader, adapter, builder (115 tes).
+
+### Diubah
+- Adapter React/Vue ditulis ulang jadi renderer generik (tanpa `switch` 18 tipe, tanpa `window`/`document`); `Fajrina.vue` → `Fajrina.ts` (render function).
+- Vue membungkus output dengan satu `<div>` (sama dengan React).
+- `<form>` diberi `novalidate`: validasi field kini dijalankan core, bukan browser.
+- `navigate` tidak lagi diam saja secara implisit: tetap no-op default, tapi sekarang lewat `ports.navigation.navigate` (sambungkan router Anda).
+- Link dengan href tidak aman (`javascript:` dll.) atau host di luar allow-list → `href="#"`; `position: fixed` di luar Modal/Toast dibuang.
+- `validateData`: policy eksplisit + policy payload digabung (`mergePolicy`), cek behavior per tipe komponen, aksi `api`, kedalaman rantai.
+- `SduiBounds.maxChainDepth` (opsional, default 4); `UniversalBehavior` + `back | submit | api`.
+- **Pemetaan error lebih rinci** (kompatibel ke belakang kecuali kode di bawah):
+  - `SduiError` + `status?` (HTTP) dan `serverCode?` (mis. `errorCode: "SDUI-002"` dari universal-service).
+  - Kode baru `http` = server menjawab non-2xx; `network` kini **hanya** kegagalan transport (offline, CORS, abort, tanpa NetworkPort).
+    **Perhatian:** 4xx/5xx tanpa cache dulu `network`, sekarang `http`.
+  - `toErrorPage(message, { kind, code, status, serverCode })`: judul mengikuti jenis — `Not Found` (404/410), `Access Denied` (401/403),
+    `Request Rejected` (4xx lain), `Service Unavailable` (5xx), `Offline`, `Invalid Page` (decode/signature), `Blocked` (strict).
+    Detail mesin di `page.error`. Tanpa opsi = output lama (`Not Found`). Helper `errorKindOf(err)`.
+
+### Deprecated (dihapus di 1.0)
+- `loadPageWithCache`, `fetchUniversalPage*`, `fetchSignedPage` → `createRuntime().load` / `loadPage` + `NetworkPort`.
+- Bentuk aksi legacy: `props.action` string, `props.behavior`, `url`/`action.action` (peringatan sekali per runtime).
+
+### Diketahui
+- Ukuran chunk core ~12,9 KB gzip, di atas target 10 KB pada desain §9 (belum ada gate `size-limit`).
+
+## [0.2.0] — 2026-11-09
+
+### Ditambahkan
+- Validasi warn-first: modul `core/validate` (kode error `decode/schema/unsupportedVersion/unknownType/unknownAction/unlistedDomain/unlistedEvent/bounds/network`, 8 angka bounds, identifier ASCII longgar-ULID, `schemaVersion` 1.x, target aksi wajib, allow-list domain/event per merchant opsional). `warnValidation()` hanya `console.warn` — tidak mengubah render.
+- Fajrina React/Vue: prop `mode` (`warn` default | `strict` fail-closed ke halaman error), `policy`, `theme`.
+- Tema project: `core/theme` (`resolveTokenRef`, `applyThemeToStyle`, `resolveThemeTokens`, tipe `UniversalTheme`) + prop `theme` di kedua adapter. Token tak dikenal jatuh ke preset (fail-soft).
+- Error page bersama `toErrorPage` di core; kedua demo memakainya (hapus duplikasi).
+- Last-good cache `core/cache` (`loadPageWithCache`, key `fajrina-page:{mid}:{key}`); kedua demo memakainya saat fetch gagal.
+- Tipe props per komponen (`core/props`, `ComponentPropsMap`, `PropsFor<T>`).
+- Envelope bertanda tangan: tipe `SignedEnvelope`, `verifyEnvelope` (Ed25519 WebCrypto), `signBytes` + `encodeEnvelopeParts` untuk tooling/test. Backend: endpoint `?signed=true` + `/signing-key`, default nonaktif.
+- Fixture `fixtures/valid/showcase-18.json` + 4 invalid; test suite vitest (core: tree/style/validate/theme/cache/sign; React: strict, Null-Object, no-alert, theme).
+
+### Diubah
+- Null-Object menggantikan kotak kuning "Unsupported type": tipe asing me-render nothing (marker garis putus-putus hanya di development).
+- Validasi form gagal tidak lagi `alert()`: mengirim `validationError` via `onAction`/`@validationError`; demo mengabaikannya (tanpa panggilan server).
+- Vue: hapus shim `declare module '@fajekrina/sdui*'` di `env.d.ts`; tipe library dipakai langsung. Alias tipe lokal di service/repository diganti tipe library.
+
+### Backend yang disesuaikan (universal-service, repo terpisah)
+- `schemaVersion: "1.0"` di semua halaman + model; format 1.x divalidasi saat save.
+- Policy per merchant: file `data/universal/policies/{merchantId}.json`, endpoint GET/PUT `/api/universal/merchant/policies/{mid}`, dilampirkan otomatis di semua respons halaman.
+- Save menegakkan: bounds (depth/nodes/string/props/children/array/identifier), Grid/Flex, navigate/modalId wajib, externalLink/customEvent melawan policy merchant bila ada.
+- Aksi form checkout diperbaiki: string legacy `/api/payment` → `{behavior: "submit", params: {target: "home"}}`.
+- Signing endpoint opsional (default nonaktif, butuh file kunci via konfigurasi).
+
+## [0.1.0] — 2026-11-03
+- Rilis awal: renderer agnostik React/Vue/Vanilla untuk Universal SDUI JSON (18 tipe), builder headless + UI React/Vue, tanpa Tailwind/Bootstrap, inline CSS via `buildLayoutStyle`.
+- Tipe `UniversalComponentType` dilengkapi: Card, Flex, Grid, Hero, Space.

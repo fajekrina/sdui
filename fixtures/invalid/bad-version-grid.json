@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "2.0",
+  "pageId": "demo-bad-version",
+  "pageKey": "bad-version",
+  "merchantId": "merchant_demo",
+  "status": "PUBLISHED",
+  "layout": {
+    "title": "Bad version",
+    "components": [
+      { "id": "g1", "type": "Grid", "props": { "columns": 99 } }
+    ]
+  }
+}

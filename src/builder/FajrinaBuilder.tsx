@@ -4,12 +4,18 @@
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Fajrina } from '../react/Fajrina'
+import { SduiNode } from '../react/SduiNode'
 import { normalizeToLayout, getComponentType, type FajrinaData, type UniversalComponent } from '../core/types'
 import { buildLayoutStyle } from '../core/style'
 import { buildTree } from '../core/tree'
-import { createBuilderState, cssTextToStyle, styleToCssText, genId } from './builder'
+import { validateData } from '../core/validate'
+import { createBuilderState, cssTextToStyle, styleToCssText, previewNode, builderPalette, defaultPropsFor, findComponentJsonRange, type RegistryComponents } from './builder'
 
-export type RegistryComponents = Record<string, { props?: Record<string, unknown> }>
+/** JSON panel metrics: the highlight band is positioned by line, so they must match the textarea. */
+const JSON_LINE = 18
+const JSON_PAD = 10
+
+export type { RegistryComponents }
 
 export interface FajrinaBuilderProps {
   data?: FajrinaData
@@ -23,15 +29,6 @@ export interface FajrinaBuilderProps {
   pageKey?: string
   className?: string
   style?: React.CSSProperties
-}
-
-const FALLBACK_ORDER = ['Container','Heading','Text','Button','Image','Input','Select','Textarea','Form','Link','Flex','Grid','Card','Hero','Divider','Space','Modal']
-
-function paletteOrder(reg?: RegistryComponents): string[] {
-  const keys = reg ? Object.keys(reg) : FALLBACK_ORDER
-  const ordered = FALLBACK_ORDER.filter(k => keys.includes(k))
-  const rest = keys.filter(k => !ordered.includes(k))
-  return [...ordered, ...rest]
 }
 
 function Field({ label, children }: { label: string, children: React.ReactNode }) {
@@ -55,6 +52,10 @@ export function FajrinaBuilder({ data, registry, pages, modals, onChange, onSave
   const [status, setStatus] = useState('')
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const lastEmittedRef = useRef<string | null>(null)
+  const [previewMode, setPreviewMode] = useState(false)
+  const [jsonOpen, setJsonOpen] = useState(true)
+  const [jsonScroll, setJsonScroll] = useState(0)
+  const jsonRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
     const l = normalizeToLayout(data ?? null)
@@ -71,9 +72,20 @@ export function FajrinaBuilder({ data, registry, pages, modals, onChange, onSave
 
   const comps = stateRef.current.toFlatArray()
   const selected = comps.find(c => c.id === selectedId) ?? null
-  const palette = useMemo(() => paletteOrder(registry), [registry])
+  const palette = useMemo(() => builderPalette(registry), [registry])
   const tree = useMemo(() => buildTree(comps), [comps, jsonText])
   const internalModals = useMemo(()=> comps.filter(c=>getComponentType(c as UniversalComponent)==='Modal').map(c=>({id:c.id})), [comps, jsonText])
+  const jsonRange = useMemo(() => findComponentJsonRange(jsonText, selectedId), [jsonText, selectedId])
+  // canvas selection → scroll the JSON panel to the selected component
+  useEffect(() => {
+    const ta = jsonRef.current
+    if (!jsonOpen || !ta || !jsonRange) return
+    const top = JSON_PAD + jsonRange.startLine * JSON_LINE
+    const bottom = JSON_PAD + (jsonRange.endLine + 1) * JSON_LINE
+    if (top < ta.scrollTop || bottom > ta.scrollTop + ta.clientHeight) ta.scrollTop = Math.max(0, top - JSON_LINE * 2)
+    setJsonScroll(ta.scrollTop)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, jsonOpen])
   const effectivePages = pages ?? ['home']
   const effectiveModals = (modals && modals.length ? modals : internalModals) as {id:string}[]
 
@@ -85,26 +97,9 @@ export function FajrinaBuilder({ data, registry, pages, modals, onChange, onSave
   }
 
   const add = (type: string, parentId: string | null = null) => {
-    // defaults dari registry props
-    const def = registry?.[type]?.props as Record<string, unknown> | undefined
-    const defaults: Record<string, unknown> = {}
-    if (def) {
-      for (const [k, v] of Object.entries(def)) {
-        if (Array.isArray(v) && v.length) defaults[k]=v[0]
-        else if (typeof v === 'object' && v !== null && 'default' in (v as Record<string,unknown>)) defaults[k]=(v as Record<string,unknown>).default
-        else if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') defaults[k]=v
-      }
-    }
-    // type-specific minimal
-    if (type==='Heading' && !defaults.content) defaults.content='Heading'
-    if (type==='Text' && !defaults.content) defaults.content='Text'
-    if (type==='Button' && !defaults.label) defaults.label='Button'
-    if (type==='Image' && !defaults.src) defaults.src='https://picsum.photos/400/200'
-    if ((type==='Input'||type==='Select'||type==='Textarea') && !defaults.name) defaults.name=type.toLowerCase() + '_' + Math.random().toString(36).slice(2,5)
+    const defaults = defaultPropsFor(type, registry)
     const added = stateRef.current.add(type, parentId)
     stateRef.current.patch(added.id, { props: defaults } as Partial<UniversalComponent>)
-    stateRef.current.patch(added.id, { type: type as never, component: type as never } as Partial<UniversalComponent>)
-    // remove the extra added without defaults and replace? Actually add already added one, we patched it. But we created comp not used. Use patch on added.
     setSelectedId(added.id)
     syncOut(stateRef.current.toFlatArray())
   }
@@ -152,6 +147,7 @@ export function FajrinaBuilder({ data, registry, pages, modals, onChange, onSave
   }
 
   const layoutData = useMemo(() => ({ layout: { components: comps } } as FajrinaData), [comps, jsonText])
+  const issues = useMemo(() => validateData(layoutData), [layoutData])
 
   const doSave = async () => { try{ await onSave?.({ components: comps }); setStatus('Saved ✔'); setTimeout(()=>setStatus(''),2500)}catch(e:unknown){ setStatus('Save failed: '+(e as Error).message)} }
   const doPublish = async () => { try{ await onPublish?.({ components: comps }); setStatus('Published ✔'); setTimeout(()=>setStatus(''),2500)}catch(e:unknown){ setStatus('Publish failed: '+(e as Error).message)} }
@@ -172,23 +168,16 @@ export function FajrinaBuilder({ data, registry, pages, modals, onChange, onSave
       onDrop: (e: React.DragEvent)=>{ e.preventDefault(); e.stopPropagation(); setDragOverId(null); const ty=e.dataTransfer.getData('text/plain'); if(ty) add(ty, node.id) }
     } : {}
 
-    // leaf preview — keep neutral putih, support all 16 types
+    // leaf preview = the client renderer (core view-model); containers keep the builder drop zones
     const leafStyle = buildLayoutStyle(t, (node.props ?? {}) as Record<string,unknown>, (node.style ?? {}) as Record<string,string>) as React.CSSProperties
+    const emptyHint = <div style={{fontSize:12, color:'#94a3b8', padding:8, textAlign:'center', border:'1px dashed #cbd5e1', borderRadius:6}}>Empty {t} — drop here</div>
     let preview: React.ReactNode = null
-    if (t==='Heading') { const lvl=Math.min(6,Math.max(1,parseInt(String((node.props as Record<string,unknown>)?.level ?? 2)))); const Tag=`h${lvl}` as never; preview = React.createElement(Tag as string, {style: leafStyle}, String((node.props as Record<string,unknown>)?.content ?? '')) }
-    else if (t==='Text') preview = <p style={leafStyle}>{String((node.props as Record<string,unknown>)?.content ?? (node.props as Record<string,unknown>)?.text ?? '')}</p>
-    else if (t==='Button') preview = <button type="button" style={leafStyle as React.CSSProperties}>{String((node.props as Record<string,unknown>)?.label ?? 'Button')}</button>
-    else if (t==='Image') preview = <img src={String((node.props as Record<string,unknown>)?.src ?? '')} alt="" style={{...leafStyle, maxHeight:320, maxWidth:'100%'} as React.CSSProperties} />
-    else if (t==='Input') { const p=node.props as Record<string,unknown>; preview = <label style={{display:'block', fontSize:12}}><span style={{color:'#374151', fontSize:11}}>{String(p.label ?? p.name ?? 'Input')}{p.required ? ' *':''}</span><input placeholder={String(p.placeholder ?? '')} style={leafStyle} disabled /></label> }
-    else if (t==='Select') { const p=node.props as Record<string,unknown>; const opts=(p.options as unknown[] ?? []); preview = <label style={{display:'block', fontSize:12}}><span style={{color:'#374151', fontSize:11}}>{String(p.label ?? p.name ?? 'Select')}{p.required ? ' *':''}</span><select style={leafStyle} disabled><option>{String(p.placeholder ?? 'Select')}</option>{opts.map((o: unknown)=>{const v=typeof o==='string'?o:String((o as Record<string,unknown>).value??''); const l=typeof o==='string'?o:String((o as Record<string,unknown>).label??v); return <option key={v} value={v}>{l}</option>})}</select></label> }
-    else if (t==='Textarea') { const p=node.props as Record<string,unknown>; preview = <label style={{display:'block', fontSize:12}}><span style={{color:'#374151', fontSize:11}}>{String(p.label ?? p.name ?? 'Textarea')}{p.required ? ' *':''}</span><textarea placeholder={String(p.placeholder ?? '')} rows={Number(p.rows ?? 3)} style={leafStyle} disabled /></label> }
-    else if (t==='Link') { const p=node.props as Record<string,unknown>; preview = <a href={String(p.href ?? '#')} style={leafStyle}>{String(p.label ?? p.text ?? 'Link')}</a> }
-    else if (t==='Space') preview = <div style={{...leafStyle, background:'#e2e8f0', border:'1px dashed #cbd5e1'}} />
-    else if (t==='Divider') preview = <div style={leafStyle} />
-    else if (['Flex','Grid'].includes(t)) preview = <div style={leafStyle}>{inner.length? inner : <div style={{fontSize:12, color:'#94a3b8', padding:8, textAlign:'center', border:'1px dashed #cbd5e1', borderRadius:6}}>Empty {t} — drop here</div>}</div>
-    else if (['Card','Hero'].includes(t)) preview = <div style={leafStyle}><div style={{fontSize:13, fontWeight:600}}>{String((node.props as Record<string,unknown>)?.title ?? t)}</div>{inner.length? <div style={{marginTop:8}}>{inner}</div> : <div style={{fontSize:12,color:'#64748b'}}>{String((node.props as Record<string,unknown>)?.description ?? '')}</div>}</div>
-    else if (isContainer) preview = <div style={leafStyle}>{inner.length? inner : <div style={{fontSize:12, color:'#94a3b8', padding:8, textAlign:'center', border:'1px dashed #cbd5e1', borderRadius:6}}>Empty {t} — drop here</div>}</div>
-    else preview = <div style={{fontSize:12, color:'#b45309'}}>Unsupported {t}</div>
+    if (isContainer) preview = <div style={leafStyle}>{inner.length ? inner : emptyHint}</div>
+    else {
+      const rn = previewNode(node)
+      preview = rn ? <SduiNode node={rn} /> : <div style={{fontSize:12, color:'#b45309'}}>Unsupported {t}</div>
+      if (t==='Space') preview = <div style={{ background:'#e2e8f0', border:'1px dashed #cbd5e1' }}>{preview}</div>
+    }
 
     return <div key={node.id} data-fid={node.id} draggable={false} style={style} onClick={e=>{ e.stopPropagation(); setSelectedId(node.id)}} {...dropProps}><div onClick={e=>{ e.stopPropagation(); setSelectedId(node.id)}}>{header}{preview}</div>{!isContainer && inner.length ? <div style={{marginTop:4}}>{inner}</div> : null}</div>
   }
@@ -199,6 +188,7 @@ export function FajrinaBuilder({ data, registry, pages, modals, onChange, onSave
         <strong style={{ fontSize:14 }}>Fajrina Builder</strong>
         {merchantId ? <span style={{ fontSize:12, color:'#9aa3c7' }}>{merchantId}/{pageKey ?? ''}</span> : null}
         <span style={{ marginLeft:'auto', fontSize:12, color: status.includes('failed')?'#ff6b6b':'#3ad29f'}}>{status}</span>
+        <button onClick={()=>setPreviewMode(v=>!v)} style={btn('#2c3354')}>{previewMode ? 'Edit' : 'Preview'}</button>
         <button onClick={doSave} style={btn('#3ad29f')}>Save</button>
         <button onClick={doPublish} style={btn('#f59e0b')}>Publish</button>
       </header>
@@ -219,10 +209,13 @@ export function FajrinaBuilder({ data, registry, pages, modals, onChange, onSave
 
         <div style={{ overflow:'auto', padding:16, display:'flex', flexDirection:'column', gap:12 }}>
           <div id="fajrina-canvas-wrap" style={{ flex:1, background:'#fff', color:'#0f172a', borderRadius:12, border:'1px solid #e2e8f0', minHeight:520, padding:24, overflow:'auto'}} onDragOver={e=>e.preventDefault()} onDrop={e=>{ e.preventDefault(); e.stopPropagation(); const t=e.dataTransfer.getData('text/plain'); if(t) add(t,null)}} onClick={()=>setSelectedId(null)}>
-            {comps.length===0 ? <div style={{ border:'2px dashed #cbd5e1', borderRadius:10, padding:40, textAlign:'center', color:'#64748b', fontSize:13}}>Canvas kosong — drag komponen dari palet kiri ke sini.<br/>Drop ke area kosong = root, drop ke Container/Form = child.</div> : tree.map(n=>renderNode(n as never))}
+            {previewMode ? <Fajrina data={layoutData} /> : comps.length===0 ? <div style={{ border:'2px dashed #cbd5e1', borderRadius:10, padding:40, textAlign:'center', color:'#64748b', fontSize:13}}>Canvas kosong — drag komponen dari palet kiri ke sini.<br/>Drop ke area kosong = root, drop ke Container/Form = child.</div> : tree.map(n=>renderNode(n as never))}
           </div>
-          {/* hidden Fajrina preview for validation (keep neutral) */}
-          <div style={{ display:'none'}}><Fajrina data={layoutData} /></div>
+          {/* same validator as client + backend: errors show up before save */}
+          {issues.length ? <div data-testid="builder-issues" style={{ background:'#2a1520', border:'1px solid #ff6b6b', borderRadius:8, padding:8, fontSize:12, color:'#ffb4b4'}}>
+            <strong>{issues.length} validation issue(s)</strong>
+            <ul style={{ margin:'4px 0 0 16px', padding:0}}>{issues.slice(0,20).map((e,i)=> <li key={i}>[{e.code}] {e.path ? e.path+' — ' : ''}{e.message}</li>)}</ul>
+          </div> : null}
         </div>
 
         <aside style={{ background:'#1a1f35', borderLeft:'1px solid #2c3354', overflow:'auto', padding:12 }}>
@@ -253,7 +246,7 @@ export function FajrinaBuilder({ data, registry, pages, modals, onChange, onSave
                     <Field label="label"><input value={String((selected.props as Record<string,unknown>)?.label ?? '')} onChange={e=>patchSelected({label:e.target.value})} style={inp()} /></Field>
                     <Field label="type"><select value={String((selected.props as Record<string,unknown>)?.type ?? 'button')} onChange={e=>patchSelected({type:e.target.value})} style={inp()}><option>button</option><option>submit</option><option>reset</option></select></Field>
                     <Field label="disabled"><select value={String(Boolean((selected.props as Record<string,unknown>)?.disabled))} onChange={e=>patchSelected({disabled:e.target.value==='true'})} style={inp()}><option value="false">false</option><option value="true">true</option></select></Field>
-                    <Field label="action.behavior"><select value={String(((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.behavior ?? (selected as UniversalComponent).action?.behavior ?? 'navigate')} onChange={e=>updateAction(e.target.value)} style={inp()}><option>navigate</option><option>submit</option><option>externalLink</option><option>back</option><option>openModal</option><option>closeModal</option><option>toast</option><option>customEvent</option></select></Field>
+                    <Field label="action.behavior"><select value={String(((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.behavior ?? (selected as UniversalComponent).action?.behavior ?? 'navigate')} onChange={e=>updateAction(e.target.value)} style={inp()}><option>navigate</option><option>submit</option><option>externalLink</option><option>back</option><option>openModal</option><option>closeModal</option><option>toast</option><option>customEvent</option><option>api</option></select></Field>
                     {(() => { const beh = String(((selected.props as Record<string,unknown>)?.action as Record<string,unknown>)?.behavior ?? (selected as UniversalComponent).action?.behavior ?? 'navigate'); const act = (((selected.props as Record<string,unknown>)?.action as Record<string,unknown>) ?? (selected as UniversalComponent).action as Record<string,unknown> ?? {}) as Record<string,unknown>; const btnType = String((selected.props as Record<string,unknown>)?.type ?? 'button'); if (beh==='navigate') return <><Field label="target (page)"><select value={String(act.target ?? '')} onChange={e=>updateAction('navigate', {target:e.target.value})} style={inp()}><option value="">-- pilih page --</option>{effectivePages.map(p=> <option key={p} value={p}>{p}</option>)}{effectivePages && !effectivePages.includes('home') ? <option value="home">home</option> : null}</select></Field><Field label="params (JSON)"><textarea value={act.params ? JSON.stringify(act.params,null,2) : ''} onChange={e=>{ try{ const v=JSON.parse(e.target.value); updateAction('navigate', {target:String(act.target ?? ''), params:v})}catch{}}} style={{...inp(), minHeight:60, fontFamily:'monospace', fontSize:11}} /></Field></>; if (beh==='externalLink') return <Field label="href"><input value={String(act.href ?? '')} onChange={e=>updateAction('externalLink', {href:e.target.value})} style={inp()} placeholder="https://example.com" /></Field>; if (beh==='openModal') return <><Field label="modalId"><select value={String(act.modalId ?? '')} onChange={e=>updateAction('openModal', {modalId:e.target.value})} style={inp()}><option value="">-- pilih Modal --</option>{effectiveModals.map(m=> <option key={m.id} value={m.id}>{m.id.slice(-6)}</option>)}{(effectiveModals.length===0) && <option disabled>Belum ada Modal — buat komponen Modal dulu</option>}</select></Field><Field label="title"><input value={String(act.title ?? '')} onChange={e=>updateAction('openModal', {modalId:String(act.modalId ?? ''), title:e.target.value})} style={inp()} /></Field><Field label="message"><textarea value={String(act.message ?? '')} onChange={e=>updateAction('openModal', {modalId:String(act.modalId ?? ''), message:e.target.value})} style={{...inp(), minHeight:50}} /></Field></>; if (beh==='toast') return <Field label="message"><textarea value={String(act.message ?? '')} onChange={e=>updateAction('toast', {message:e.target.value})} style={{...inp(), minHeight:50}} placeholder="Berhasil disimpan" /></Field>; if (beh==='customEvent') return <><Field label="eventName"><input value={String(act.eventName ?? '')} onChange={e=>updateAction('customEvent', {eventName:e.target.value})} style={inp()} /></Field><Field label="params (JSON)"><textarea value={act.params ? JSON.stringify(act.params,null,2) : ''} onChange={e=>{ try{ updateAction('customEvent', {eventName:String(act.eventName ?? ''), params:JSON.parse(e.target.value)})}catch{}}} style={{...inp(), minHeight:60, fontFamily:'monospace', fontSize:11}} /></Field></>; if (beh==='submit') { const isSubmitModal = !!act.modalId; return <><Field label="On success"><select value={isSubmitModal ? 'openModal' : 'navigate'} onChange={e=>{ if(e.target.value==='openModal') updateAction('submit', {modalId: effectiveModals[0]?.id ?? '', target: undefined}); else updateAction('submit', {target: effectivePages[0] ?? 'home', modalId: undefined})} } style={inp()}><option value="navigate">Redirect to page</option><option value="openModal">Open modal</option></select></Field>{isSubmitModal ? <Field label="modalId"><select value={String(act.modalId ?? '')} onChange={e=>updateAction('submit', {modalId:e.target.value})} style={inp()}><option value="">-- pilih Modal --</option>{effectiveModals.map(m=> <option key={m.id} value={m.id}>{m.id.slice(-6)}</option>)}{(effectiveModals.length===0) && <option disabled>Belum ada Modal — buat komponen Modal dulu</option>}</select></Field> : <Field label="target (page)"><select value={String(act.target ?? '')} onChange={e=>updateAction('submit', {target:e.target.value})} style={inp()}><option value="">-- pilih page --</option>{effectivePages.map(p=> <option key={p} value={p}>{p}</option>)}</select></Field>}<Field label="params (JSON)"><textarea value={act.params ? JSON.stringify(act.params,null,2) : ''} onChange={e=>{ try{ const v=JSON.parse(e.target.value); if(isSubmitModal) updateAction('submit', {modalId:String(act.modalId ?? ''), params:v}); else updateAction('submit', {target:String(act.target ?? ''), params:v})}catch{}}} style={{...inp(), minHeight:60, fontFamily:'monospace', fontSize:11}} /></Field></> } return null })()}
                   </>}
                   {['Input','Select','Textarea'].includes(String(getComponentType(selected))) && <>
@@ -314,13 +307,25 @@ export function FajrinaBuilder({ data, registry, pages, modals, onChange, onSave
         </aside>
       </div>
 
-      <div style={{ height:260, background:'#1a1f35', borderTop:'1px solid #2c3354', display:'flex', flexDirection:'column'}}>
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', background:'#232a45', borderBottom:'1px solid #2c3354'}}>
+      <div style={{ height: jsonOpen ? 260 : 'auto', background:'#1a1f35', borderTop:'1px solid #2c3354', display:'flex', flexDirection:'column'}}>
+        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', background:'#232a45', borderBottom: jsonOpen ? '1px solid #2c3354' : 0}}>
+          <button onClick={()=>setJsonOpen(o=>!o)} aria-expanded={jsonOpen} aria-controls="sdui-builder-json" title={jsonOpen ? 'Tutup JSON' : 'Buka JSON'} style={{ ...btn('#0f1220'), fontSize:11, padding:'0 8px', height:24, width:28}}>{jsonOpen ? '▾' : '▸'}</button>
           <span style={{ fontSize:12, color:'#9aa3c7'}}>JSON — flat array (2-way sync)</span>
-          <button onClick={()=>{ try{ setJsonText(JSON.stringify(JSON.parse(jsonText),null,2))}catch{}}} style={{ marginLeft:'auto', ...btn('#0f1220'), fontSize:11, padding:'4px 8px'}}>Format</button>
+          {selected && (
+            <span style={{ fontSize:11, color: jsonRange ? '#c7d2fe' : '#9aa3c7', background: jsonRange ? 'rgba(108,140,255,.18)' : 'transparent', border:'1px solid #6c8cff', borderRadius:999, padding:'1px 8px', display:'inline-flex', alignItems:'center', gap:6}}>
+              <span style={{ width:7, height:7, borderRadius:999, background:'#6c8cff'}} />
+              {String(getComponentType(selected))} · {selected.id.slice(-6)}{jsonRange ? ` · baris ${jsonRange.startLine + 1}–${jsonRange.endLine + 1}` : ' · tidak ditemukan di JSON'}
+            </span>
+          )}
+          {jsonOpen && <button onClick={()=>{ try{ setJsonText(JSON.stringify(JSON.parse(jsonText),null,2))}catch{}}} style={{ marginLeft:'auto', ...btn('#0f1220'), fontSize:11, padding:'4px 8px'}}>Format</button>}
         </div>
-        <textarea value={jsonText} onChange={e=>onJsonEdit(e.target.value)} spellCheck={false} style={{ flex:1, background:'#0f1220', color:'#e6e9f5', border:0, padding:10, fontFamily:'monospace', fontSize:12, resize:'none', outline:'none'}} />
-        {jsonError && <div style={{ fontSize:11, color:'#ff6b6b', padding:'4px 8px'}}>{jsonError}</div>}
+        {jsonOpen && (
+          <div id="sdui-builder-json" style={{ position:'relative', flex:1, minHeight:0, background:'#0f1220', overflow:'hidden'}}>
+            {jsonRange && <div aria-hidden style={{ position:'absolute', left:0, right:0, top: JSON_PAD + jsonRange.startLine * JSON_LINE - jsonScroll, height: (jsonRange.endLine - jsonRange.startLine + 1) * JSON_LINE, background:'rgba(108,140,255,.14)', borderLeft:'3px solid #6c8cff', pointerEvents:'none'}} />}
+            <textarea ref={jsonRef} value={jsonText} onChange={e=>onJsonEdit(e.target.value)} onScroll={e=>setJsonScroll(e.currentTarget.scrollTop)} spellCheck={false} wrap="off" style={{ position:'absolute', inset:0, width:'100%', height:'100%', boxSizing:'border-box', background:'transparent', color:'#e6e9f5', border:0, padding:JSON_PAD, fontFamily:'monospace', fontSize:12, lineHeight:`${JSON_LINE}px`, whiteSpace:'pre', overflow:'auto', resize:'none', outline:'none'}} />
+          </div>
+        )}
+        {jsonOpen && jsonError && <div style={{ fontSize:11, color:'#ff6b6b', padding:'4px 8px'}}>{jsonError}</div>}
       </div>
     </div>
   )

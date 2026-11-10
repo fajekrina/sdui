@@ -1,0 +1,13 @@
+{
+  "pageId": "demo-bad-type",
+  "pageKey": "bad-type",
+  "merchantId": "merchant_demo",
+  "status": "PUBLISHED",
+  "layout": {
+    "title": "Bad type",
+    "components": [
+      { "id": "ok1", "type": "Buton Typo", "props": { "label": "x" } },
+      { "id": "id rusak!", "type": "Text", "props": { "content": "x" } }
+    ]
+  }
+}

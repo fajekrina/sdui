@@ -17,6 +17,8 @@ export default defineConfig({
     lib: {
       entry: {
         'core/index': resolve(__dirname, 'src/core/index.ts'),
+        'browser/index': resolve(__dirname, 'src/browser/index.ts'),
+        'vanilla/index': resolve(__dirname, 'src/vanilla/index.ts'),
         'react/index': resolve(__dirname, 'src/react/index.ts'),
         'vue/index': resolve(__dirname, 'src/vue/index.ts'),
         'builder/index': resolve(__dirname, 'src/builder/index.ts'),

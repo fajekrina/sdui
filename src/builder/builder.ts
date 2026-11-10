@@ -5,6 +5,49 @@
  */
 import type { UniversalComponent, UniversalLayout, FajrinaData } from '../core/types'
 import { normalizeToLayout } from '../core/types'
+import { renderComponent, type RenderNode } from '../core/view-model'
+import { COMPONENT_REGISTRY, paletteTypes } from '../core/registry'
+import type { UiState } from '../core/ui-store'
+
+// ---------------------------------------------------------------------------
+// Preview = client renderer: builder previews use the same view-model as <Fajrina>
+// ---------------------------------------------------------------------------
+const EMPTY_UI: UiState = { toasts: [], modal: null, forms: {} }
+const SILENT = { warn: () => {}, error: () => {} }
+
+/** Static (non-interactive) RenderNode for one component, without its children. */
+export function previewNode(comp: UniversalComponent): RenderNode | null {
+  return renderComponent({ ...comp, children: [] } as UniversalComponent, {
+    state: EMPTY_UI, interactive: false, dev: true, logger: SILENT
+  })
+}
+
+export type RegistryComponents = Record<string, { props?: Record<string, unknown> }>
+
+/** Palette order: consumer registry (e.g. backend component-types) or the core registry. */
+export function builderPalette(registry?: RegistryComponents): string[] {
+  const core = paletteTypes() as string[]
+  if (!registry) return core
+  const keys = Object.keys(registry)
+  return [...core.filter((t) => keys.includes(t)), ...keys.filter((k) => !core.includes(k))]
+}
+
+/** Default props for a new component: core descriptor, overridden by the consumer registry. */
+export function defaultPropsFor(type: string, registry?: RegistryComponents): Record<string, unknown> {
+  const core = (COMPONENT_REGISTRY as Record<string, { defaultProps: Record<string, unknown> } | undefined>)[type]
+  const out: Record<string, unknown> = { ...(core?.defaultProps ?? {}) }
+  const def = registry?.[type]?.props
+  if (def) {
+    for (const [k, v] of Object.entries(def)) {
+      if (Array.isArray(v) && v.length) out[k] = v[0]
+      else if (typeof v === 'object' && v !== null && 'default' in (v as Record<string, unknown>)) out[k] = (v as Record<string, unknown>).default
+      else if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') out[k] = v
+    }
+  }
+  if (type === 'Image' && !out.src) out.src = 'https://picsum.photos/400/200'
+  if (type === 'Input' || type === 'Select' || type === 'Textarea') out.name = `${type.toLowerCase()}_${Math.random().toString(36).slice(2, 5)}`
+  return out
+}
 
 export function genId(): string {
   const alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -125,4 +168,55 @@ export function createBuilderState(initial?: FajrinaData): {
       selectedId = null
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// JSON panel: locate a component inside the flat-array JSON text
+// ---------------------------------------------------------------------------
+export interface JsonRange { startLine: number; endLine: number }
+
+/**
+ * 0-based line range of the top-level array item whose `"id"` equals `id`.
+ * Tolerant scanner (string/escape aware, no JSON.parse), so it also works on
+ * hand-edited or temporarily invalid text; returns null when not found.
+ */
+export function findComponentJsonRange(text: string, id: string | null | undefined): JsonRange | null {
+  if (!id || !text) return null
+  const stack: { ch: string; start: number }[] = []
+  let pendingKey: string | null = null
+  let foundStart = -1
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]!
+    if (ch === '"') {
+      let j = i + 1
+      let value = ''
+      while (j < text.length && text[j] !== '"') {
+        if (text[j] === '\\') { value += text[j + 1] ?? ''; j += 2; continue }
+        value += text[j]; j++
+      }
+      let k = j + 1
+      while (k < text.length && /\s/.test(text[k]!)) k++
+      if (text[k] === ':') pendingKey = value
+      else {
+        if (foundStart < 0 && pendingKey === 'id' && value === id && stack.length === 2 && stack[0]!.ch === '[' && stack[1]!.ch === '{') {
+          foundStart = stack[1]!.start
+        }
+        pendingKey = null
+      }
+      i = j
+      continue
+    }
+    if (ch === '{' || ch === '[') { stack.push({ ch, start: i }); pendingKey = null; continue }
+    if (ch === '}' || ch === ']') {
+      const open = stack.pop()
+      if (foundStart >= 0 && open && open.start === foundStart) {
+        const lineOf = (pos: number) => text.slice(0, pos).split('\n').length - 1
+        return { startLine: lineOf(foundStart), endLine: lineOf(i) }
+      }
+      pendingKey = null
+      continue
+    }
+    if (ch === ',') pendingKey = null
+  }
+  return null
 }

@@ -2,6 +2,8 @@
 import { computed } from 'vue'
 import { getComponentType } from '../core/types'
 import { buildLayoutStyle } from '../core/style'
+import { previewNode } from './builder'
+import { SduiNodeView } from '../vue/SduiNode'
 import type { UniversalComponent } from '../core/types'
 
 const props = defineProps<{
@@ -13,6 +15,7 @@ const emit = defineEmits<{ (e: 'select', id: string): void; (e: ' dragover', id:
 
 const t = computed(() => getComponentType(props.node))
 const isContainer = computed(() => ['Container','Form','Flex','Grid','Card','Hero'].includes(t.value))
+const preview = computed(() => previewNode(props.node))
 const leafStyle = computed(() => buildLayoutStyle(t.value, (props.node.props as Record<string,unknown> ?? {}), (props.node.style as Record<string,string> ?? {})) as Record<string,string>)
 </script>
 
@@ -32,17 +35,10 @@ const leafStyle = computed(() => buildLayoutStyle(t.value, (props.node.props as 
       </div>
     </template>
     <template v-else>
-      <div :style="leafStyle">
-        <template v-if="t==='Heading'">{{ String((node.props as Record<string,unknown>)?.content ?? '') }}</template>
-        <template v-else-if="t==='Text'">{{ String((node.props as Record<string,unknown>)?.content ?? (node.props as Record<string,unknown>)?.text ?? '') }}</template>
-        <template v-else-if="t==='Button'">{{ String((node.props as Record<string,unknown>)?.label ?? 'Button') }}</template>
-        <template v-else-if="t==='Image'"><img :src="String((node.props as Record<string,unknown>)?.src ?? '')" style="max-width:100%;max-height:320px;" /></template>
-        <template v-else-if="t==='Input'"><label style="display:block;font-size:12px;"><span style="color:#374151;font-size:11px;">{{ String((node.props as Record<string,unknown>)?.label ?? (node.props as Record<string,unknown>)?.name ?? 'Input') }}</span><input :placeholder="String((node.props as Record<string,unknown>)?.placeholder ?? '')" disabled :style="buildLayoutStyle('Input',{},(node.style as Record<string,string> ?? {}))" /></label></template>
-        <template v-else-if="t==='Select'"><label style="display:block;font-size:12px;"><span style="color:#374151;font-size:11px;">{{ String((node.props as Record<string,unknown>)?.label ?? (node.props as Record<string,unknown>)?.name ?? 'Select') }}</span><select disabled :style="buildLayoutStyle('Select',{},(node.style as Record<string,string> ?? {}))"><option>{{ String((node.props as Record<string,unknown>)?.placeholder ?? 'Select') }}</option></select></label></template>
-        <template v-else-if="t==='Textarea'"><label style="display:block;font-size:12px;"><span style="color:#374151;font-size:11px;">{{ String((node.props as Record<string,unknown>)?.label ?? (node.props as Record<string,unknown>)?.name ?? 'Textarea') }}</span><textarea :placeholder="String((node.props as Record<string,unknown>)?.placeholder ?? '')" disabled :style="buildLayoutStyle('Textarea',{},(node.style as Record<string,string> ?? {}))"></textarea></label></template>
-        <template v-else-if="t==='Link'"><a :href="String((node.props as Record<string,unknown>)?.href ?? '#')" :style="buildLayoutStyle('Link',(node.props as Record<string,unknown> ?? {}),(node.style as Record<string,string> ?? {}))">{{ String((node.props as Record<string,unknown>)?.label ?? 'Link') }}</a></template>
-        <template v-else-if="t==='Divider'"></template>
-        <template v-else>{{ t }}</template>
+      <!-- leaf preview = the client renderer (core view-model) -->
+      <div :style="t==='Space' ? { background:'#e2e8f0', border:'1px dashed #cbd5e1' } : undefined">
+        <SduiNodeView v-if="preview" :node="preview" />
+        <div v-else style="font-size:12px;color:#b45309;">Unsupported {{ t }}</div>
       </div>
       <div v-if="(node.children ?? []).length" style="margin-top:4px;">
         <BuilderNode v-for="ch in (node.children as unknown as (UniversalComponent & {children:UniversalComponent[]})[])" :key="ch.id" :node="ch as never" :selectedId="selectedId" :dragOverId="dragOverId" @select="$emit('select',$event)" @dragover="$emit('dragover',$event)" @drop="$emit('drop',$event)" />

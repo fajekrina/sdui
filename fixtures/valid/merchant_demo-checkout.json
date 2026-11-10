@@ -1,0 +1,269 @@
+{
+  "pageId": "merchant_demo-checkout",
+  "pageKey": "checkout",
+  "merchantId": "merchant_demo",
+  "status": "PUBLISHED",
+  "schemaVersion": "1.0",
+  "version": 1,
+  "createdAt": "2026-09-08T00:00:00",
+  "updatedAt": "2026-09-08T00:00:00",
+  "layout": {
+    "type": "Container",
+    "components": [
+      {
+        "id": "01JQ2D7KX8WBHKC7ZT2V625EPT",
+        "component": "Container",
+        "parentId": null,
+        "props": {
+          "as": "div"
+        },
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "gap": "20px",
+          "padding": "24px",
+          "maxWidth": "720px",
+          "margin": "0 auto",
+          "backgroundColor": "#ffffff"
+        },
+        "order": 0
+      },
+      {
+        "id": "01JQ2D7KX8WBHKC7ZT2VHEAD01",
+        "component": "Heading",
+        "parentId": "01JQ2D7KX8WBHKC7ZT2V625EPT",
+        "props": {
+          "content": "Checkout",
+          "level": 2
+        },
+        "style": {
+          "fontSize": "24px",
+          "fontWeight": "700",
+          "color": "#0f172a",
+          "textAlign": "center",
+          "marginBottom": "4px"
+        },
+        "order": 1
+      },
+      {
+        "id": "01JQ2D7KX8WBHKC7ZT2VTEXT01",
+        "component": "Text",
+        "parentId": "01JQ2D7KX8WBHKC7ZT2V625EPT",
+        "props": {
+          "content": "Lengkapi data pemesanan",
+          "tag": "p"
+        },
+        "style": {
+          "fontSize": "14px",
+          "color": "#64748b",
+          "textAlign": "center",
+          "marginBottom": "12px"
+        },
+        "order": 2
+      },
+      {
+        "id": "01JQ2D7KX87F3QQ26MH4H9ZGBM",
+        "component": "Form",
+        "parentId": "01JQ2D7KX8WBHKC7ZT2V625EPT",
+        "props": {
+          "action": {
+            "behavior": "submit",
+            "params": {
+              "target": "home"
+            }
+          },
+          "method": "POST",
+          "enctype": "application/json"
+        },
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "gap": "16px",
+          "padding": "24px",
+          "backgroundColor": "#ffffff",
+          "border": "1px solid #e2e8f0",
+          "borderRadius": "12px",
+          "boxShadow": "0 1px 3px rgba(0,0,0,0.08)"
+        },
+        "order": 3
+      },
+      {
+        "id": "01JQ2D7KX8SD794RJF7RCSVG6K",
+        "component": "Input",
+        "parentId": "01JQ2D7KX87F3QQ26MH4H9ZGBM",
+        "props": {
+          "type": "text",
+          "name": "name",
+          "label": "Nama Lengkap",
+          "placeholder": "Contoh: Budi Santoso",
+          "required": true,
+          "minLength": 8,
+          "maxLength": 50
+        },
+        "style": {
+          "width": "100%",
+          "padding": "10px",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "fontSize": "14px",
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a"
+        },
+        "order": 4
+      },
+      {
+        "id": "01JQ2D7KX88BB59ADFRBQ73E29",
+        "component": "Input",
+        "parentId": "01JQ2D7KX87F3QQ26MH4H9ZGBM",
+        "props": {
+          "type": "email",
+          "name": "email",
+          "label": "Email",
+          "placeholder": "budi@example.com",
+          "required": true,
+          "validation": [
+            {
+              "rule": "email",
+              "message": "Email tidak valid"
+            }
+          ]
+        },
+        "style": {
+          "width": "100%",
+          "padding": "10px",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "fontSize": "14px",
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a"
+        },
+        "order": 5
+      },
+      {
+        "id": "01JQ2D7KX8J16F0B7T5NMAM4BR",
+        "component": "Input",
+        "parentId": "01JQ2D7KX87F3QQ26MH4H9ZGBM",
+        "props": {
+          "type": "tel",
+          "name": "phone",
+          "label": "No. Telepon",
+          "placeholder": "08xxxxxxxxxx",
+          "required": true,
+          "minLength": 10
+        },
+        "style": {
+          "width": "100%",
+          "padding": "10px",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "fontSize": "14px",
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a"
+        },
+        "order": 6
+      },
+      {
+        "id": "01JQ2D7KX81P43MG84EQBBY1DC",
+        "component": "Select",
+        "parentId": "01JQ2D7KX87F3QQ26MH4H9ZGBM",
+        "props": {
+          "name": "payment_method",
+          "options": [
+            {
+              "label": "Kartu Kredit/Debit",
+              "value": "CARD"
+            },
+            {
+              "label": "Transfer Bank",
+              "value": "TRANSFER"
+            },
+            {
+              "label": "E-Wallet",
+              "value": "E_WALLET"
+            },
+            {
+              "label": "QRIS",
+              "value": "QRIS"
+            }
+          ],
+          "placeholder": "Pilih metode",
+          "required": true
+        },
+        "style": {
+          "width": "100%",
+          "padding": "10px",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "fontSize": "14px",
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a"
+        },
+        "order": 7
+      },
+      {
+        "id": "01JQ2D7KX8Z92XMXT5BXHF9ZZS",
+        "component": "Textarea",
+        "parentId": "01JQ2D7KX87F3QQ26MH4H9ZGBM",
+        "props": {
+          "name": "notes",
+          "placeholder": "Tambahkan catatan untuk pesanan (opsional)",
+          "rows": 4
+        },
+        "style": {
+          "width": "100%",
+          "padding": "10px",
+          "border": "1px solid #cbd5e1",
+          "borderColor": "#cbd5e1",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "fontSize": "14px",
+          "backgroundColor": "#ffffff",
+          "color": "#0f172a"
+        },
+        "order": 8
+      },
+      {
+        "id": "01JQ2D7KX8DWBDDMMTBBM8H64F",
+        "component": "Button",
+        "parentId": "01JQ2D7KX87F3QQ26MH4H9ZGBM",
+        "props": {
+          "label": "Bayar Sekarang",
+          "type": "submit",
+          "action": {
+            "behavior": "submit"
+          }
+        },
+        "style": {
+          "backgroundColor": "#6c8cff",
+          "color": "#ffffff",
+          "paddingTop": "12px",
+          "paddingRight": "24px",
+          "paddingBottom": "12px",
+          "paddingLeft": "24px",
+          "borderRadius": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "textAlign": "center",
+          "cursor": "pointer",
+          "border": "none",
+          "width": "100%",
+          "marginTop": "8px"
+        },
+        "order": 9
+      }
+    ]
+  }
+}

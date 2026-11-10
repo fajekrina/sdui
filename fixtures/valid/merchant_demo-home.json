@@ -1,0 +1,524 @@
+{
+  "pageId": "merchant_demo-home",
+  "pageKey": "home",
+  "merchantId": "merchant_demo",
+  "status": "PUBLISHED",
+  "schemaVersion": "1.0",
+  "version": 1,
+  "createdAt": "2026-09-08T00:00:00",
+  "updatedAt": "2026-09-08T00:00:00",
+  "layout": {
+    "type": "Container",
+    "components": [
+      {
+        "id": "01HQ0000000000000000000001",
+        "component": "Container",
+        "parentId": null,
+        "props": {
+          "as": "div"
+        },
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "gap": "24px",
+          "padding": "24px",
+          "maxWidth": "1200px",
+          "margin": "0 auto",
+          "backgroundColor": "#ffffff"
+        },
+        "order": 0
+      },
+      {
+        "id": "01HQ0000000000000000000002",
+        "component": "Container",
+        "parentId": "01HQ0000000000000000000001",
+        "props": {
+          "as": "div"
+        },
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "gap": "16px",
+          "padding": "32px",
+          "backgroundColor": "#f8fafc",
+          "borderRadius": "12px",
+          "border": "1px solid #e2e8f0",
+          "alignItems": "center"
+        },
+        "order": 1
+      },
+      {
+        "id": "01HQ0000000000000000000003",
+        "component": "Heading",
+        "parentId": "01HQ0000000000000000000002",
+        "props": {
+          "content": "Selamat Datang di Universal SDUI",
+          "level": 1
+        },
+        "style": {
+          "color": "#0f172a",
+          "fontSize": "32px",
+          "fontWeight": "700",
+          "textAlign": "center",
+          "marginBottom": "8px"
+        },
+        "order": 2
+      },
+      {
+        "id": "01HQ0000000000000000000004",
+        "component": "Text",
+        "parentId": "01HQ0000000000000000000002",
+        "props": {
+          "content": "Satu JSON untuk semua platform — edit sekali, tampil identik di React & Vue. Pilih event favoritmu di bawah.",
+          "tag": "p"
+        },
+        "style": {
+          "color": "#475569",
+          "fontSize": "16px",
+          "lineHeight": "1.6",
+          "textAlign": "center",
+          "maxWidth": "640px"
+        },
+        "order": 3
+      },
+      {
+        "id": "01HQ0000000000000000000005",
+        "component": "Button",
+        "parentId": "01HQ0000000000000000000002",
+        "props": {
+          "label": "Pilih Kursi Sekarang",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "seat-selection",
+            "params": {}
+          }
+        },
+        "style": {
+          "backgroundColor": "#6c8cff",
+          "color": "#ffffff",
+          "paddingTop": "12px",
+          "paddingRight": "24px",
+          "paddingBottom": "12px",
+          "paddingLeft": "24px",
+          "borderRadius": "8px",
+          "fontSize": "16px",
+          "fontWeight": "600",
+          "marginTop": "8px",
+          "cursor": "pointer",
+          "border": "none"
+        },
+        "order": 4
+      },
+      {
+        "id": "01HQ0000000000000000000006",
+        "component": "Container",
+        "parentId": "01HQ0000000000000000000001",
+        "props": {
+          "as": "div"
+        },
+        "style": {
+          "display": "grid",
+          "gridTemplateColumns": "repeat(3, minmax(0, 1fr))",
+          "gridGap": "16px",
+          "marginTop": "8px"
+        },
+        "order": 5
+      },
+      {
+        "id": "01HQ0000000000000000000007",
+        "component": "Container",
+        "parentId": "01HQ0000000000000000000006",
+        "props": {
+          "as": "div"
+        },
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "gap": "12px",
+          "padding": "16px",
+          "backgroundColor": "#ffffff",
+          "border": "1px solid #e2e8f0",
+          "borderRadius": "12px",
+          "overflow": "hidden",
+          "boxShadow": "0 1px 3px rgba(0,0,0,0.08)"
+        },
+        "order": 6
+      },
+      {
+        "id": "01HQ0000000000000000000008",
+        "component": "Image",
+        "parentId": "01HQ0000000000000000000007",
+        "props": {
+          "src": "https://picsum.photos/seed/event-jazz-01/600/400",
+          "alt": "Jazz Night Festival",
+          "loading": "lazy"
+        },
+        "style": {
+          "width": "100%",
+          "height": "160px",
+          "objectFit": "cover",
+          "borderRadius": "8px"
+        },
+        "order": 7
+      },
+      {
+        "id": "01HQ0000000000000000000009",
+        "component": "Heading",
+        "parentId": "01HQ0000000000000000000007",
+        "props": {
+          "content": "Jazz Night Festival",
+          "level": 3
+        },
+        "style": {
+          "color": "#0f172a",
+          "fontSize": "18px",
+          "fontWeight": "600",
+          "textAlign": "left"
+        },
+        "order": 8
+      },
+      {
+        "id": "01HQ0000000000000000000010",
+        "component": "Text",
+        "parentId": "01HQ0000000000000000000007",
+        "props": {
+          "content": "18 Okt 2026 • 20:00 WIB • Balai Sarbini",
+          "tag": "p"
+        },
+        "style": {
+          "color": "#64748b",
+          "fontSize": "14px",
+          "lineHeight": "1.5"
+        },
+        "order": 9
+      },
+      {
+        "id": "01HQ0000000000000000000011",
+        "component": "Button",
+        "parentId": "01HQ0000000000000000000007",
+        "props": {
+          "label": "Lihat Detail",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "seat-selection",
+            "params": {
+              "eventId": "event-jazz-01"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#6c8cff",
+          "border": "1px solid #6c8cff",
+          "borderColor": "#6c8cff",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "8px",
+          "paddingRight": "16px",
+          "paddingBottom": "8px",
+          "paddingLeft": "16px",
+          "fontSize": "14px",
+          "fontWeight": "600",
+          "cursor": "pointer",
+          "marginTop": "4px"
+        },
+        "order": 10
+      },
+      {
+        "id": "01HQ0000000000000000000012",
+        "component": "Container",
+        "parentId": "01HQ0000000000000000000006",
+        "props": {
+          "as": "div"
+        },
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "gap": "12px",
+          "padding": "16px",
+          "backgroundColor": "#ffffff",
+          "border": "1px solid #e2e8f0",
+          "borderRadius": "12px",
+          "overflow": "hidden",
+          "boxShadow": "0 1px 3px rgba(0,0,0,0.08)"
+        },
+        "order": 11
+      },
+      {
+        "id": "01HQ0000000000000000000013",
+        "component": "Image",
+        "parentId": "01HQ0000000000000000000012",
+        "props": {
+          "src": "https://picsum.photos/seed/event-rock-02/600/400",
+          "alt": "Rock Revival Concert",
+          "loading": "lazy"
+        },
+        "style": {
+          "width": "100%",
+          "height": "160px",
+          "objectFit": "cover",
+          "borderRadius": "8px"
+        },
+        "order": 12
+      },
+      {
+        "id": "01HQ0000000000000000000014",
+        "component": "Heading",
+        "parentId": "01HQ0000000000000000000012",
+        "props": {
+          "content": "Rock Revival Concert",
+          "level": 3
+        },
+        "style": {
+          "color": "#0f172a",
+          "fontSize": "18px",
+          "fontWeight": "600",
+          "textAlign": "left"
+        },
+        "order": 13
+      },
+      {
+        "id": "01HQ0000000000000000000015",
+        "component": "Text",
+        "parentId": "01HQ0000000000000000000012",
+        "props": {
+          "content": "25 Okt 2026 • 19:30 WIB • Istora Senayan",
+          "tag": "p"
+        },
+        "style": {
+          "color": "#64748b",
+          "fontSize": "14px",
+          "lineHeight": "1.5"
+        },
+        "order": 14
+      },
+      {
+        "id": "01HQ0000000000000000000016",
+        "component": "Button",
+        "parentId": "01HQ0000000000000000000012",
+        "props": {
+          "label": "Lihat Detail",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "seat-selection",
+            "params": {
+              "eventId": "event-rock-02"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#6c8cff",
+          "border": "1px solid #6c8cff",
+          "borderColor": "#6c8cff",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "8px",
+          "paddingRight": "16px",
+          "paddingBottom": "8px",
+          "paddingLeft": "16px",
+          "fontSize": "14px",
+          "fontWeight": "600",
+          "cursor": "pointer",
+          "marginTop": "4px"
+        },
+        "order": 15
+      },
+      {
+        "id": "01HQ0000000000000000000017",
+        "component": "Container",
+        "parentId": "01HQ0000000000000000000006",
+        "props": {
+          "as": "div"
+        },
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "gap": "12px",
+          "padding": "16px",
+          "backgroundColor": "#ffffff",
+          "border": "1px solid #e2e8f0",
+          "borderRadius": "12px",
+          "overflow": "hidden",
+          "boxShadow": "0 1px 3px rgba(0,0,0,0.08)"
+        },
+        "order": 16
+      },
+      {
+        "id": "01HQ0000000000000000000018",
+        "component": "Image",
+        "parentId": "01HQ0000000000000000000017",
+        "props": {
+          "src": "https://picsum.photos/seed/event-orchestra-03/600/400",
+          "alt": "Orchestra Under Stars",
+          "loading": "lazy"
+        },
+        "style": {
+          "width": "100%",
+          "height": "160px",
+          "objectFit": "cover",
+          "borderRadius": "8px"
+        },
+        "order": 17
+      },
+      {
+        "id": "01HQ0000000000000000000019",
+        "component": "Heading",
+        "parentId": "01HQ0000000000000000000017",
+        "props": {
+          "content": "Orchestra Under Stars",
+          "level": 3
+        },
+        "style": {
+          "color": "#0f172a",
+          "fontSize": "18px",
+          "fontWeight": "600",
+          "textAlign": "left"
+        },
+        "order": 18
+      },
+      {
+        "id": "01HQ0000000000000000000020",
+        "component": "Text",
+        "parentId": "01HQ0000000000000000000017",
+        "props": {
+          "content": "02 Nov 2026 • 19:00 WIB • Taman Ismail Marzuki",
+          "tag": "p"
+        },
+        "style": {
+          "color": "#64748b",
+          "fontSize": "14px",
+          "lineHeight": "1.5"
+        },
+        "order": 19
+      },
+      {
+        "id": "01HQ0000000000000000000021",
+        "component": "Button",
+        "parentId": "01HQ0000000000000000000017",
+        "props": {
+          "label": "Lihat Detail",
+          "type": "button",
+          "action": {
+            "behavior": "navigate",
+            "target": "seat-selection",
+            "params": {
+              "eventId": "event-orchestra-03"
+            }
+          }
+        },
+        "style": {
+          "backgroundColor": "#ffffff",
+          "color": "#6c8cff",
+          "border": "1px solid #6c8cff",
+          "borderColor": "#6c8cff",
+          "borderWidth": "1px",
+          "borderStyle": "solid",
+          "borderRadius": "8px",
+          "paddingTop": "8px",
+          "paddingRight": "16px",
+          "paddingBottom": "8px",
+          "paddingLeft": "16px",
+          "fontSize": "14px",
+          "fontWeight": "600",
+          "cursor": "pointer",
+          "marginTop": "4px"
+        },
+        "order": 20
+      },
+      {
+        "id": "01HQ0000000000000000000022",
+        "component": "Container",
+        "parentId": "01HQ0000000000000000000001",
+        "props": {
+          "as": "div"
+        },
+        "style": {
+          "display": "flex",
+          "flexDirection": "column",
+          "gap": "8px",
+          "padding": "20px",
+          "backgroundColor": "#0f172a",
+          "borderRadius": "12px",
+          "alignItems": "center",
+          "marginTop": "12px"
+        },
+        "order": 21
+      },
+      {
+        "id": "01HQ0000000000000000000023",
+        "component": "Text",
+        "parentId": "01HQ0000000000000000000022",
+        "props": {
+          "content": "© 2026 Universal SDUI Demo — merchant_demo",
+          "tag": "p"
+        },
+        "style": {
+          "color": "#94a3b8",
+          "fontSize": "12px",
+          "textAlign": "center"
+        },
+        "order": 22
+      },
+      {
+        "id": "01HQ0000000000000000000024",
+        "component": "Link",
+        "parentId": "01HQ0000000000000000000022",
+        "props": {
+          "href": "https://example.com/privacy",
+          "label": "Kebijakan Privasi",
+          "target": "_blank",
+          "rel": "noopener noreferrer"
+        },
+        "style": {
+          "color": "#6c8cff",
+          "fontSize": "13px",
+          "textDecoration": "underline",
+          "cursor": "pointer"
+        },
+        "order": 23
+      },
+      {
+        "id": "01HQ0000000000000000000025",
+        "component": "Link",
+        "parentId": "01HQ0000000000000000000022",
+        "props": {
+          "href": "https://example.com/terms",
+          "label": "Syarat & Ketentuan",
+          "target": "_blank",
+          "rel": "noopener noreferrer"
+        },
+        "style": {
+          "color": "#6c8cff",
+          "fontSize": "13px",
+          "textDecoration": "underline",
+          "cursor": "pointer"
+        },
+        "order": 24
+      },
+      {
+        "id": "01HQ0000000000000000000026",
+        "component": "Link",
+        "parentId": "01HQ0000000000000000000022",
+        "props": {
+          "href": "mailto:support@example.com",
+          "label": "Hubungi Kami",
+          "target": "_self",
+          "rel": "noopener noreferrer"
+        },
+        "style": {
+          "color": "#6c8cff",
+          "fontSize": "13px",
+          "textDecoration": "none",
+          "cursor": "pointer"
+        },
+        "order": 25
+      }
+    ]
+  }
+}

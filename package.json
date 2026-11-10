@@ -1,6 +1,6 @@
 {
   "name": "@fajekrina/sdui",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Fajekrina SDUI — Universal agnostic renderer (React/Vue/Vanilla) for Universal SDUI JSON. No Tailwind/Bootstrap bundled.",
   "license": "MIT",
   "type": "module",
@@ -26,6 +26,11 @@
       "import": "./dist/core/index.js",
       "require": "./dist/core/index.cjs"
     },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "import": "./dist/browser/index.js",
+      "require": "./dist/browser/index.cjs"
+    },
     "./react": {
       "types": "./dist/react/index.d.ts",
       "import": "./dist/react/index.js",
@@ -35,6 +40,11 @@
       "types": "./dist/vue/index.d.ts",
       "import": "./dist/vue/index.js",
       "require": "./dist/vue/index.cjs"
+    },
+    "./vanilla": {
+      "types": "./dist/vanilla/index.d.ts",
+      "import": "./dist/vanilla/index.js",
+      "require": "./dist/vanilla/index.cjs"
     },
     "./builder": {
       "types": "./dist/builder/index.d.ts",
@@ -55,13 +65,26 @@
   "main": "./dist/core/index.cjs",
   "module": "./dist/core/index.js",
   "types": "./dist/core/index.d.ts",
-  "files": ["dist", "README.md", "LICENSE"],
-  "keywords": ["sdui", "server-driven-ui", "react", "vue", "agnostic"],
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "sdui",
+    "server-driven-ui",
+    "react",
+    "vue",
+    "agnostic",
+    "vanilla",
+    "headless"
+  ],
   "scripts": {
     "build": "vite build",
     "prepare": "npm run build",
     "dev": "vite build --watch",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.tests.json",
+    "test": "vitest run",
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
@@ -70,17 +93,27 @@
     "vue": "^3.3.0"
   },
   "peerDependenciesMeta": {
-    "react": { "optional": true },
-    "react-dom": { "optional": true },
-    "vue": { "optional": true }
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "vue": {
+      "optional": true
+    }
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.6.6",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "jsdom": "^31.0.0",
     "typescript": "^5.5.0",
     "vite": "^6.0.0",
     "vite-plugin-dts": "^4.0.0",
-    "@types/react": "^18.3.0",
-    "@types/react-dom": "^18.3.0",
-    "vue": "^3.4.0",
-    "@vitejs/plugin-vue": "^5.0.0"
+    "vitest": "^5.1.0",
+    "vue": "^3.4.0"
   }
 }

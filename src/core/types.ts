@@ -10,7 +10,8 @@ export type UniversalComponentType =
   | 'Form' | 'Input' | 'Select' | 'Textarea' | 'Link' | 'Divider' | 'Hero' | 'Space'
   | 'Toast' | 'Modal'
 
-export type UniversalBehavior = 'navigate' | 'submit' | 'openModal' | 'closeModal' | 'externalLink' | 'back' | 'toast' | 'customEvent'
+export type UniversalBehavior =
+  | 'navigate' | 'back' | 'submit' | 'openModal' | 'closeModal' | 'externalLink' | 'toast' | 'customEvent' | 'api'
 
 export interface UniversalAction {
   behavior?: UniversalBehavior
@@ -19,10 +20,17 @@ export interface UniversalAction {
   modalId?: string
   message?: string
   eventName?: string
+  title?: string
   params?: Record<string, unknown>
-  // legacy aliases still accepted
-  action?: string
+  /** `api` action: request target (must pass policy.allowedDomains) */
   url?: string
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+  body?: unknown
+  /** linear chain, depth bounded by SduiBounds.maxChainDepth */
+  onSuccess?: UniversalAction
+  onError?: UniversalAction
+  /** @deprecated legacy alias of `behavior`, removed in 1.0 */
+  action?: string
 }
 
 export interface UniversalComponent {
@@ -69,11 +77,18 @@ export type FajrinaData = UniversalPageConfig | UniversalLayout | UniversalCompo
 
 export interface FajrinaActionEvent {
   behavior?: string
+  /** same as behavior (kept for 0.x consumers) */
   action?: string
   target?: string
+  href?: string
+  eventName?: string
+  /** form values on submit, response body for `api`, missing fields for validationError */
   data?: Record<string, unknown>
   params?: Record<string, unknown>
   sourceComponent: UniversalComponent
+  /** skip the library's default effect (navigation/back/externalLink/toast/modal/event) */
+  preventDefault?: () => void
+  defaultPrevented?: boolean
 }
 
 export function normalizeToLayout(data: FajrinaData): UniversalLayout | null {

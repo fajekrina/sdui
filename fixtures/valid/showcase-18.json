@@ -1,0 +1,54 @@
+{
+  "pageId": "merchant_demo-home",
+  "pageKey": "home",
+  "merchantId": "merchant_demo",
+  "status": "PUBLISHED",
+  "layout": {
+    "title": "Home",
+    "subtitle": "Showcase 18 komponen",
+    "components": [
+      { "id": "h1", "type": "Heading", "props": { "level": 2, "content": "Selamat datang" } },
+      { "id": "t1", "type": "Text", "props": { "content": "Contoh payload Universal Page." } },
+      { "id": "img1", "type": "Image", "props": { "src": "https://cdn.example.com/banner.png", "alt": "Banner" } },
+      { "id": "btn-nav", "type": "Button", "props": { "label": "Lihat detail" }, "action": { "behavior": "navigate", "target": "detail" } },
+      { "id": "btn-ext", "type": "Button", "props": { "label": "Buka situs" }, "action": { "behavior": "externalLink", "href": "https://example.com" } },
+      { "id": "btn-toast", "type": "Button", "props": { "label": "Sapa" }, "action": { "behavior": "toast", "message": "Halo!" } },
+      { "id": "btn-modal", "type": "Button", "props": { "label": "Buka info" }, "action": { "behavior": "openModal", "modalId": "m1", "title": "Info", "message": "Isi modal." } },
+      { "id": "link1", "type": "Link", "props": { "label": "Kebijakan", "href": "https://example.com/policy", "target": "_blank" } },
+      { "id": "div1", "type": "Divider", "props": { "label": "atau" } },
+      { "id": "space1", "type": "Space", "props": { "height": "lg" } },
+      {
+        "id": "flex1", "type": "Flex", "props": { "direction": "row", "justify": "between", "gap": "md" },
+        "children": [
+          { "id": "flex-t1", "type": "Text", "props": { "content": "Kiri" } },
+          { "id": "flex-t2", "type": "Text", "props": { "content": "Kanan" } }
+        ]
+      },
+      {
+        "id": "grid1", "type": "Grid", "props": { "columns": 2, "gap": "md" },
+        "children": [
+          { "id": "card1", "type": "Card", "children": [{ "id": "card-t1", "type": "Text", "props": { "content": "Kartu 1" } }] },
+          { "id": "card2", "type": "Card", "children": [{ "id": "card-t2", "type": "Text", "props": { "content": "Kartu 2" } }] }
+        ]
+      },
+      {
+        "id": "hero1", "type": "Hero",
+        "children": [
+          { "id": "hero-h", "type": "Heading", "props": { "level": 2, "content": "Promo" } },
+          { "id": "hero-t", "type": "Text", "props": { "content": "Diskon akhir tahun." } }
+        ]
+      },
+      { "id": "box1", "type": "Container", "children": [{ "id": "box-t", "type": "Text", "props": { "content": "Dalam wadah." } }] },
+      {
+        "id": "form1", "type": "Form", "props": { "submitLabel": "Kirim" },
+        "children": [
+          { "id": "f-name", "type": "Input", "props": { "name": "nama", "label": "Nama", "required": true } },
+          { "id": "f-city", "type": "Select", "props": { "name": "kota", "label": "Kota", "options": [{ "value": "jkt", "label": "Jakarta" }] } },
+          { "id": "f-note", "type": "Textarea", "props": { "name": "catatan", "label": "Catatan", "rows": 3 } }
+        ]
+      },
+      { "id": "toast1", "type": "Toast", "props": { "message": "Tersimpan." } },
+      { "id": "m1", "type": "Modal", "props": { "title": "Info", "message": "Isi modal." } }
+    ]
+  }
+}

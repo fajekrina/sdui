@@ -2,7 +2,7 @@
 
 > Status: desain siap implementasi · Tanggal: 2026-11-10
 > Target database: PostgreSQL 14+ (jsonb). Dokumen ini berisi desain + ERD + kamus data; DDL ditulis saat implementasi.
-> Menggantikan bagian penyimpanan di `ARSITEKTUR-SDUI-SPLIT.md §4/§8` dan merapikan inkonsistensi di `SPLIT-RAKIT-CLIENT-VS-SERVER.md`.
+> Menggantikan bagian penyimpanan di `ARSITEKTUR-SDUI-SPLIT.md §4/§8` dan merapikan inkonsistensi di `docs/SPLIT-RAKIT-CLIENT-VS-SERVER.md`.
 > Keputusan yang dipertahankan: **S1 + A1** (server membelah saat simpan, server merakit saat baca), release atomik + sequence monoton.
 
 ---
@@ -14,7 +14,7 @@
 | 1 | Satu page disimpan sebagai **3 artefak blob jsonb**: **style**, **tree**, **script** | Sesuai rencana split; sederhana; siap dikirim apa adanya bila A2 diaktifkan |
 | 2 | Artefak **immutable + berversi**; simpan yang isinya sama tidak membuat versi baru (dibandingkan lewat `content_hash`) | Release lama tidak bisa berubah; tidak ada versi sampah |
 | 3 | Style dimiliki **merchant** (dipakai banyak page); tree dan script dimiliki **page** | Ganti brand sekali untuk semua page; struktur & aksi spesifik per halaman |
-| 4 | Tree disimpan **bersarang saja** (`children`), tanpa `parentId/order` | Satu representasi (P0 `PAYLOAD-RAMPING-SDUI.md`); `parentId/order` diturunkan saat rakit |
+| 4 | Tree disimpan **bersarang saja** (`children`), tanpa `parentId/order` | Satu representasi (P0 `docs/PAYLOAD-RAMPING-SDUI.md`); `parentId/order` diturunkan saat rakit |
 | 5 | **Satu view** `v_sdui_release_payload` = satu-satunya logika rakit JSON | Satu sumber kebenaran untuk publish, preview, diff |
 | 6 | Hasil view **dibekukan** ke `sdui_release.payload` saat publish | Baca produksi O(1); perubahan resolver tidak diam-diam mengubah release lama |
 | 7 | Aturan yang hari ini hardcode (tipe komponen, behavior, bounds) jadi **data berversi** | Satu sumber untuk builder, backend, dan library |
@@ -641,3 +641,26 @@ Beralih ke penyimpanan per komponen bila salah satu terjadi:
 - halaman tumbuh sampai ribuan node.
 
 Karena setiap node di blob sudah punya `id` (ULID) tetap, peralihan cukup berupa migrasi data (urai blob → record), tanpa mengubah kontrak API.
+
+## 12. Implementasi H2 (2026-11-10) — deviasi dari desain PostgreSQL
+
+Diimplementasikan di `universal-service` (Spring Boot 4.1, H2 2.4, Flyway 12). Lihat `universal-service/HANDOFF.md`.
+
+| Desain (PostgreSQL) | Implementasi H2 | Alasan |
+|---|---|---|
+| `jsonb` + index GIN | `CLOB` berisi teks JSON; bentuk divalidasi aplikasi | H2 tidak punya jsonb/GIN. Query lintas halaman = baca di aplikasi |
+| `text[]` | `CLOB` JSON array | idem |
+| View merakit dengan fungsi JSON SQL | View memanggil fungsi Java `SDUI_ASSEMBLE / SDUI_UNRESOLVED / SDUI_NODE_COUNT` (`CREATE ALIAS` → `db/SduiDbFunctions`) yang memakai `PayloadAssembler` | View tetap satu-satunya definisi "payload rakitan sebuah release"; draft builder memakai assembler yang sama |
+| Trigger PL/pgSQL | Trigger Java `db/ImmutableRowTrigger`, `db/ReleaseGuardTrigger` | idem semantik: UPDATE artefak/policy/bounds ditolak; release fill-once; DELETE release ditolak |
+| Body tree `{schemaVersion, layout, root}` | `{schemaVersion, layout, nodes: [...]}` | builder bisa membuat lebih dari satu root |
+| `content_hash` `bytea` | `VARCHAR(64)` hex | lebih mudah dibaca/di-ETag-kan |
+| Signature atas `content_hash` | Signature Ed25519 atas **byte payload** (yang hash-nya = `content_hash`) | kompatibel dengan `verifyEnvelope` client 0.2; integritasnya setara |
+| `PUT /merchant/styles/{styleKey}` | `PUT /merchant/styles/{merchantId}/{styleKey}` (+ `PUT /merchant/pages/{mid}/{key}/style` untuk memilih style draft) | style milik merchant |
+| `lockVersion` wajib | `lockVersion` opsional di body simpan; bila dikirim dan usang → 409 | builder lama tetap bisa simpan |
+| — | `DELETE page` = ARCHIVE (release tetap sebagai riwayat; client 404) | release immutable |
+| Akses data SQL langsung | JPA entity + Spring Data repository; satu `@Service` per use case (pola service Maverick); kolom audit `CREATED_BY/CREATED_TIME/UPDATED_BY/UPDATED_TIME/VERSION` (migrasi V3) | konsisten dengan service tim; optimistic lock page = `@Version` |
+| `/api/universal/...` | `/api/universal/v1/...` (`server.servlet.context-path=/api`, controller `universal/v1/…`) | API berversi |
+| error `{error}` | `{errorDesc, errorCode: "SDUI-nnn", errorMessage, timestamp}` dari enum `UniversalFault` | satu kontrak error, status HTTP dari fault |
+| — | `GET /merchant/pages/{mid}/{key}/trees[/{v}]`, `/audit`, `/merchant/component-types`, `/client/signing-keys` | kebutuhan builder & client baru |
+
+Dihasilkan seed saat DB kosong: `data/universal/{policies,pages}` di classpath (bekas penyimpanan file) disimpan + dipublish seperti builder (`config/SduiBootstrap`). Terverifikasi: ketiga halaman `merchant_demo` keluar identik dengan file sumber (`SduiStoreIntegrationTest`).
