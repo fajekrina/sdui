@@ -41,6 +41,8 @@ export function fetchNetworkClient(options: FetchClientOptions): NetworkClient {
       const send = async (refresh: boolean) => {
         const headers: Record<string, string> = { Accept: 'application/json', ...(await options.getHeaders?.({ refresh }) ?? {}) }
         if (body !== undefined) headers['Content-Type'] = 'application/json'
+        // one key per user tap + request: a retried or doubled submit is dropped server-side
+        if (opts.idempotencyKey && endpoint.method !== 'GET') headers['Idempotency-Key'] = opts.idempotencyKey
         return doFetch(url, { method: endpoint.method, headers, body, signal: opts.signal, credentials: 'omit' })
       }
       let response: Response
@@ -57,12 +59,17 @@ export function fetchNetworkClient(options: FetchClientOptions): NetworkClient {
   }
 }
 
+/// Fill `{param}` path segments. Fails closed: a missing/empty value, or a dot
+/// segment (`.`, `..`, which `encodeURIComponent` leaves intact and a URL parser
+/// would resolve to another endpoint), rejects the request before it is sent.
 function buildRequest(base: string, endpoint: Endpoint, params: SduiProps): { url: string; body?: string } {
   const rest: Record<string, SduiValue> = { ...params }
   const path = endpoint.path.replace(/\{([A-Za-z0-9_]+)\}/g, (_, name: string) => {
     const value = rest[name]
     delete rest[name]
-    return encodeURIComponent(value == null ? '' : String(value))
+    const text = value === null || value === undefined || typeof value === 'object' ? '' : String(value).trim()
+    if (text === '' || text === '.' || text === '..') throw SduiError.schema(`path parameter "${name}" is missing or not allowed`)
+    return encodeURIComponent(text)
   })
   if (endpoint.method === 'GET' || endpoint.method === 'DELETE') {
     const query = Object.entries(rest)

@@ -1,7 +1,7 @@
 # HANDOFF — @fajekrina/sdui (library)
 
-> Tanggal: 2026-11-11 · Versi: **0.4.0** (BREAKING; belum di-commit, belum di-publish)
-> Acuan: **"Usulan Arsitektur SDUI: Selaras dengan Murti"** (`../Usulan Arsitektur SDUI Selaras dengan Murti.md`)
+> Tanggal: 2026-11-11 · Versi: **0.5.0** (0.4.0 = commit `d7f5cb9`; 0.5.0 menutup review 0.4.0)
+> Acuan: **"Usulan Arsitektur SDUI: Selaras dengan Murti"** (@Akbar, 10 Nov 2026) — tautan: _diisi_
 > Spec: `spec/` · Host: `HOST-BRIDGE.md` · Riwayat: `CHANGELOG.md` · Atribusi: `NOTICE`
 > Belum disesuaikan (sengaja, menyusul): `universal-service`, `react-tailwind`, `vue-bootstrap` — lihat §7.
 
@@ -94,8 +94,24 @@ error per field + event `form_invalid`) → `ActionDispatcher` → Command tertu
 | Aplikasi host Android/iOS | ⏳ | di luar repo ini; kontrak di `HOST-BRIDGE.md` |
 | Versi minimum WebView/iOS dari data distribusi | ⏳ | butir terbuka usulan |
 
-Angka saat ini: **164 tes / 11 file** lulus; typecheck src + tests bersih; build bersih;
-ukuran (esbuild, minify, gzip): core 16,5 KB, react 1,3, vue 1,2, vanilla 1,3, browser 2,4, bridge 2,7.
+Angka saat ini: **184 tes / 12 file** lulus; typecheck src + tests bersih; build bersih;
+ukuran (esbuild, minify, gzip): core 17,7 KB (budget 18), react 1,3, vue 1,2, vanilla 1,3, browser 2,5, bridge 2,9.
+
+### Review 0.4.0
+| # | Temuan | Status |
+| --- | --- | --- |
+| 1 | Layout basi tanpa manifest | ✅ stale-while-revalidate + `onUpdate` |
+| 2 | Anti-rollback hilang saat restart | ✅ manifest dipersist + diverifikasi ulang saat start (host: persist `sequence` bundle, lihat HOST-BRIDGE) |
+| 3 | Tap ganda | ✅ kunci per handler/form + `aria-busy` + `Idempotency-Key` (backend wajib menghormatinya) |
+| 4 | Default insecure | ✅ fail-closed tanpa `security` (release) |
+| 5 | Dot-segment di path | ✅ ditolak sebelum kirim |
+| 6 | URL gambar absolut | ✅ `relativeAssetURL` bawaan + CSP `img-src` di HOST-BRIDGE |
+| 7 | `secure` memaksa keyboard angka | ✅ |
+| 8 | `auth.token` tanpa dedupe | ✅ |
+| 9 | `sduiBridge.receive` global iOS | ✅ dibekukan + allow-list event + cek id; sisa risiko: skrip di origin yang sama masih bisa mengirim event yang di-allow-list — CSP ketat tetap pengaman utama |
+| 10 | Pesan validasi Inggris | ✅ `messages` (`MESSAGES_ID`) |
+| 11 | Proses | ⚠ docx dikeluarkan; rujukan usulan menunggu tautan; commit berikutnya per PR |
+| 12 | CI conformance hijau | ⏳ perlu dicek di GitHub Actions (tidak ada akses `gh` di mesin ini; WebKit tak bisa jalan di Windows) |
 
 ### Deviasi yang disengaja
 - **Validator lapis 2 di client ditulis tangan** (port `MurtiSchemaValidator`), bukan Ajv di runtime: Ajv ±35 KB
@@ -130,13 +146,16 @@ tests/                vitest (fixtures/legacy = halaman Universal lama untuk com
 - Token API pola B (`getHeaders({ refresh })`), hanya di memori; 401 → satu kali refresh.
 - `secure` field tidak masuk data layar, log, maupun cache. Respons `api` tidak pernah di-cache.
 - `load()` tidak pernah throw; kegagalan = `errorView` (judul per jenis error, detail hanya `debug`).
+- Tanpa `security` engine **menolak semua payload** (kecuali `debug: true`); development menulis `PayloadSecurity.insecureDevelopment`.
+- Tanpa manifest, layar dari cache selalu direvalidasi di belakang; dengan manifest, versi manifest yang menentukan.
+- Satu tap = satu idempotency key; backend harus menolak duplikat `Idempotency-Key`.
 - Last-good offline hanya untuk kegagalan transport (offline/5xx); payload baru yang gagal verifikasi tidak ditutupi.
 
 ## 6. Cara kerja
 ```bash
 npm ci                     # repo ini berdiri sendiri; lockfile sudah diperbarui & npm ci terverifikasi
 npm run typecheck
-npm test                   # 164 tes (spec gate, kemurnian core, paritas 3 renderer, engine, keamanan, bridge, builder)
+npm test                   # 184 tes (spec gate, kemurnian core, paritas 3 renderer, engine, keamanan, bridge, builder, regresi review)
 npm run build
 npm run size
 npm run conformance        # perlu `npx playwright install chromium webkit`; WebKit hanya jalan di Linux/macOS

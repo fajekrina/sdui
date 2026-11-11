@@ -18,7 +18,7 @@ export { SduiBounds } from './bounds'
 export { SchemaValidator } from './validator'
 export { TokenResolver, tokenKeys, resolveValue } from './token'
 export { DataContext } from './data-context'
-export { FIELD_PATTERNS, validateField, type FieldRule } from './patterns'
+export { FIELD_PATTERNS, MESSAGES_EN, MESSAGES_ID, validateField, type FieldRule, type FieldMessages } from './patterns'
 
 // Rendering
 export { renderNode, cleanAttrs, type RenderNode, type RenderElement, type RenderResult } from './render-node'
@@ -38,7 +38,7 @@ export { PayloadSecurity } from './security'
 export { SduiCache, cacheKey, CacheCoordinator, Manifest, MemoryCacheStore, PassthroughCipher, type CacheStore, type CacheCipher } from './cache'
 
 // Engine
-export { SduiEngine, createEngine, ScreenSource, LoadState, type EngineInit, type LoadOrigin } from './engine'
+export { SduiEngine, createEngine, relativeAssetURL, ScreenSource, LoadState, type EngineInit, type LoadOrigin, type LoadOptions } from './engine'
 export { ScreenController, errorView, type RenderOptions } from './screen'
 export type { SduiEvent } from './events'
 

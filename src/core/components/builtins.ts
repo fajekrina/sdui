@@ -202,10 +202,11 @@ export class ButtonComponent implements Component {
   static readonly defaultProps = { title: 'Button' }
   makeView(node: SduiNode, ctx: RenderContext): RenderNode {
     const variant = BUTTON_VARIANTS[node.string('variant')] ?? BUTTON_VARIANTS.plain!
+    const busy = ctx.busy(node)
     return renderNode(ctx.keyFor(node), 'button', {
       type: node.type,
-      attrs: cleanAttrs({ type: 'button', ...a11y(node, ctx) }),
-      style: { font: 'inherit', fontSize: '16px', cursor: 'pointer', textAlign: 'center', ...variant, ...sharedStyle(node) },
+      attrs: cleanAttrs({ type: 'button', disabled: busy, 'aria-busy': busy ? 'true' : undefined, ...a11y(node, ctx) }),
+      style: { font: 'inherit', fontSize: '16px', cursor: busy ? 'progress' : 'pointer', opacity: busy ? '0.6' : '1', textAlign: 'center', ...variant, ...sharedStyle(node) },
       text: ctx.resolve(node.string('title')),
       on: ctx.onClick(node, node.action)
     })
@@ -398,7 +399,7 @@ export class TextFieldComponent implements Component {
       attrs: cleanAttrs({
         ...attrs,
         type: secure ? 'password' : mode.type,
-        inputmode: secure ? 'numeric' : mode.inputmode,
+        inputmode: mode.inputmode,
         autocomplete: secure ? 'off' : mode.autocomplete,
         'data-sdui-secure': secure ? 'true' : undefined,
         value: ctx.interactive ? value : undefined

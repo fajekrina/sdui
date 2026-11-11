@@ -6,7 +6,7 @@ import {
   bytesEqual, cacheKey, concatBytes, createEngine, keyedVerifier, sortedJSONStringify, utf8, type CacheStore, type SduiEvent
 } from '../src/core'
 import { aesGcmCipher, generateAesKey, indexedDbStore, webCryptoEd25519 } from '../src/browser'
-import { Counter, envelopeJSON, signingKey, type SigningKey } from './helpers'
+import { Counter, envelopeJSON, signingKey, type SigningKey , devEngine } from './helpers'
 
 const payloadJSON = utf8('{"schemaVersion":"1.1","screen":{"key":"s","root":{"type":"text"}}}')
 
@@ -24,7 +24,7 @@ describe('Ed25519 (WebCrypto) + PayloadSecurity', () => {
 
   it('signed policy: loads a valid envelope, rejects forged and unsigned payloads', async () => {
     const key = await signingKey()
-    const engine = createEngine({ security: PayloadSecurity.signed(await webCryptoEd25519(key.publicKey)) })
+    const engine = devEngine({ security: PayloadSecurity.signed(await webCryptoEd25519(key.publicKey)) })
     const ok = await engine.load(ScreenSource.inline(envelopeJSON(payloadJSON, await key.sign(payloadJSON))))
     expect(ok.kind).toBe('loaded')
     const forged = utf8('{"schemaVersion":"1.1","screen":{"key":"s","root":{"type":"button","props":{"title":"HACKED"}}}}')
@@ -38,14 +38,14 @@ describe('Ed25519 (WebCrypto) + PayloadSecurity', () => {
     const k1 = await signingKey()
     const k2 = await signingKey()
     const verifier = keyedVerifier({ k1: await webCryptoEd25519(k1.publicKey), k2: await webCryptoEd25519(k2.publicKey) })
-    const engine = createEngine({ security: PayloadSecurity.signed(verifier) })
+    const engine = devEngine({ security: PayloadSecurity.signed(verifier) })
     expect((await engine.load(ScreenSource.inline(envelopeJSON(payloadJSON, await k2.sign(payloadJSON), 'k2')))).kind).toBe('loaded')
     expect((await engine.load(ScreenSource.inline(envelopeJSON(payloadJSON, await k2.sign(payloadJSON), 'k1')))).kind).toBe('failed')
     expect((await engine.load(ScreenSource.inline(envelopeJSON(payloadJSON, await k2.sign(payloadJSON), 'k9')))).kind).toBe('failed')
   })
 
   it('development accepts bare payloads and unverified envelopes', async () => {
-    const engine = createEngine()
+    const engine = devEngine()
     expect((await engine.load(ScreenSource.inline(payloadJSON))).kind).toBe('loaded')
     expect((await engine.load(ScreenSource.inline(envelopeJSON(payloadJSON, utf8('bogus'))))).kind).toBe('loaded')
   })
@@ -59,18 +59,19 @@ describe('signed cache tiers', () => {
     const envelope = async (type: string, signer = key) => envelopeJSON(home(type), await signer.sign(home(type)))
     const fetches = new Counter()
     const factory = new ScreenFactory().register('home', provider(fetches, envelope))
-    const engine = createEngine({ screenFactory: factory, security: PayloadSecurity.signed(await webCryptoEd25519(key.publicKey)), cache: new SduiCache({ store }) })
+    const engine = devEngine({ screenFactory: factory, security: PayloadSecurity.signed(await webCryptoEd25519(key.publicKey)), cache: new SduiCache({ store }) })
     return { engine, fetches, store, envelope }
   }
 
   it('disk hit avoids a refetch; a tampered entry is evicted and refetched', async () => {
     const { engine, fetches, store } = await setup((f, env) => async () => { f.bump(); return env('text') })
+    engine.coordinator!.apply(new Manifest(1, { home: 'v1' }))   // versioned: a disk hit is current
     await engine.load(ScreenSource.key('home'))
     engine.coordinator!.purgeRenderCache()
     expect((await engine.load(ScreenSource.key('home'))).kind).toBe('loaded')
     expect(fetches.count).toBe(1)
     engine.coordinator!.purgeRenderCache()
-    await store.store(utf8('corrupted'), cacheKey('home', 'unversioned'))
+    await store.store(utf8('corrupted'), cacheKey('home', 'v1'))
     await engine.load(ScreenSource.key('home'))
     expect(fetches.count).toBe(2)
   })
@@ -106,13 +107,14 @@ describe('signed cache tiers', () => {
     const key = await signingKey()
     const env = envelopeJSON(home('text'), await key.sign(home('text')))
     const fetches = new Counter()
-    const engine = createEngine({
+    const engine = devEngine({
       screenFactory: new ScreenFactory().register('home', () => { fetches.bump(); return env }),
       security: PayloadSecurity.signed(await webCryptoEd25519(key.publicKey)),
       cache: new SduiCache({ store, cipher })
     })
+    engine.coordinator!.apply(new Manifest(1, { home: 'v1' }))
     await engine.load(ScreenSource.key('home'))
-    const sealed = (await store.data(cacheKey('home', 'unversioned')))!
+    const sealed = (await store.data(cacheKey('home', 'v1')))!
     expect(bytesEqual(sealed, env)).toBe(false)              // encrypted at rest
     engine.coordinator!.purgeRenderCache()
     expect((await engine.load(ScreenSource.key('home'))).kind).toBe('loaded')
@@ -134,7 +136,7 @@ describe('manifest anti-rollback', () => {
     const attacker = await signingKey()
     const events: SduiEvent[] = []
     const queue: Array<{ seq: number; signer: SigningKey }> = [{ seq: 7, signer: key }, { seq: 5, signer: key }, { seq: 9, signer: attacker }]
-    const engine = createEngine({
+    const engine = devEngine({
       security: PayloadSecurity.signed(await webCryptoEd25519(key.publicKey)),
       cache: new SduiCache({ store: new MemoryCacheStore() }),
       onEvent: (e) => events.push(e),

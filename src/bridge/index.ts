@@ -22,6 +22,9 @@ import type { SduiEvent } from '../core/events'
 
 export const BRIDGE_VERSION = 1
 
+/// Host events the web side accepts; anything else is ignored.
+export const HOST_EVENTS: readonly string[] = ['host.back', 'host.theme', 'host.viewport']
+
 /// The host methods the web side calls. A host implements exactly these.
 export type BridgeMethod =
   | 'host.info'
@@ -74,7 +77,11 @@ export function platformTransport(win: BridgeWindow = window as BridgeWindow): B
       const handler = win.webkit!.messageHandlers!.sdui!
       return {
         post: (m) => handler.postMessage(m),
-        listen: (on) => { win.sduiBridge = { receive: (m) => on(typeof m === 'string' ? m : JSON.stringify(m)) } }
+        listen: (on) => {
+          // frozen and non-reconfigurable: page scripts can't swap the receiver
+          const receiver = Object.freeze({ receive: (m: unknown) => on(typeof m === 'string' ? m : JSON.stringify(m)) })
+          Object.defineProperty(win, 'sduiBridge', { value: receiver, writable: false, configurable: false, enumerable: false })
+        }
       }
     }
     default:
@@ -130,10 +137,13 @@ export class Bridge {
     try { message = JSON.parse(raw) } catch { return }
     if (message.v !== BRIDGE_VERSION) return
     if (typeof message.event === 'string') {
-      this.listeners.get(message.event)?.forEach((l) => l(message.data ?? {}))
+      if (!HOST_EVENTS.includes(message.event)) return
+      const data = message.data && typeof message.data === 'object' && !Array.isArray(message.data) ? message.data : {}
+      this.listeners.get(message.event)?.forEach((l) => l(data))
       return
     }
-    if (typeof message.id !== 'string') return
+    // a reply must match a request we are waiting for (ids are never reused)
+    if (typeof message.id !== 'string' || !/^r-\d+$/.test(message.id)) return
     const pending = this.pending.get(message.id)
     if (!pending) return
     clearTimeout(pending.timer)
@@ -169,6 +179,7 @@ export function nativeBridgePorts(options: { transport?: BridgeTransport; timeou
   const bridge = new Bridge(transport, options.timeoutMs, (method, message) => errors.forEach((e) => e(method, message)))
 
   let token: { headers: Record<string, string> } | undefined
+  let pendingToken: Promise<{ headers: Record<string, string> }> | undefined
   let width = typeof window !== 'undefined' ? window.innerWidth : 0
   const widthListeners = new Set<() => void>()
   bridge.on('host.viewport', (data) => {
@@ -193,11 +204,17 @@ export function nativeBridgePorts(options: { transport?: BridgeTransport; timeou
       }
     },
     async getHeaders({ refresh }) {
-      if (!token || refresh) {
-        const result = await bridge.call<{ accessToken?: string }>('auth.token', { refresh })
-        token = result?.accessToken ? { headers: { Authorization: `Bearer ${result.accessToken}` } } : { headers: {} }
-      }
-      return token.headers
+      if (token && !refresh) return token.headers
+      // concurrent callers (parallel screen.load) share one in-flight request
+      const request: Promise<{ headers: Record<string, string> }> = pendingToken ?? bridge.call<{ accessToken?: string }>('auth.token', { refresh })
+        .then((result) => {
+          const headers: Record<string, string> = result?.accessToken ? { Authorization: `Bearer ${result.accessToken}` } : {}
+          token = { headers }
+          return token
+        })
+        .finally(() => { pendingToken = undefined })
+      pendingToken = request
+      return (await request).headers
     },
     viewport: {
       width: () => width,

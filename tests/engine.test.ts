@@ -4,7 +4,7 @@ import {
   SduiCache, SduiEngine, SduiError, cacheKey, createEngine, errorKindOf, utf8, type NetworkClient, type RenderNode,
   type SduiEvent, type SduiProps
 } from '../src/core'
-import { fixture, flush, Counter } from './helpers'
+import { fixture, flush, Counter , devEngine } from './helpers'
 
 const text = (nodes: RenderNode[]): string => nodes.map((n) => (n.text ?? '') + text(n.children)).join('')
 const find = (nodes: RenderNode[], pred: (n: RenderNode) => boolean): RenderNode | undefined => {
@@ -32,7 +32,7 @@ function fakeNetwork(table: Record<string, unknown | Error>, calls: Array<[strin
 }
 
 describe('SduiEngine.load', () => {
-  const engine = (factory = new ScreenFactory()) => createEngine({ screenFactory: factory })
+  const engine = (factory = new ScreenFactory()) => devEngine({ screenFactory: factory })
 
   it('loads inline, key, and fails closed for unknown / named-without-resolver / garbage / invalid', async () => {
     expect((await engine().load(ScreenSource.inline(payload({ type: 'vstack' })))).kind).toBe('loaded')
@@ -64,7 +64,7 @@ describe('SduiEngine.load', () => {
 
   it('emits screen_loaded and validation_failed', async () => {
     const events: SduiEvent[] = []
-    const e = createEngine({ onEvent: (ev) => events.push(ev) })
+    const e = devEngine({ onEvent: (ev) => events.push(ev) })
     await e.load(ScreenSource.inline(payload({ type: 'text' })))
     await e.load(ScreenSource.inline('{}'))
     expect(events.map((ev) => ev.type)).toEqual(['screen_loaded', 'validation_failed'])
@@ -73,7 +73,7 @@ describe('SduiEngine.load', () => {
 
 describe('ScreenController', () => {
   it('renders tokens from seed, re-renders on data change', async () => {
-    const screen = createEngine().screen(ScreenSource.inline(payload({ type: 'text', props: { value: 'Hi {{name}}' } })), { seed: { name: 'Ada' } })
+    const screen = devEngine().screen(ScreenSource.inline(payload({ type: 'text', props: { value: 'Hi {{name}}' } })), { seed: { name: 'Ada' } })
     await screen.load()
     expect(text(screen.render().nodes)).toBe('Hi Ada')
     screen.data.merge({ name: 'Grace' })
@@ -81,7 +81,7 @@ describe('ScreenController', () => {
   })
 
   it('shows a loading view, then the fail-closed error view', async () => {
-    const screen = createEngine().screen(ScreenSource.key('ghost'))
+    const screen = devEngine().screen(ScreenSource.key('ghost'))
     expect(find(screen.render().nodes, (n) => n.attrs.role === 'progressbar')).toBeDefined()
     await screen.load()
     const error = find(screen.render().nodes, (n) => n.attrs.role === 'alert')!
@@ -101,7 +101,7 @@ describe('ScreenController', () => {
         return utf8(JSON.stringify({ amount: 1250 }))
       }
     }
-    const engine = createEngine({ actionDispatcher: new ActionDispatcher({ network }) })
+    const engine = devEngine({ actionDispatcher: new ActionDispatcher({ network }) })
     const screen = engine.screen(ScreenSource.inline(fixture('valid/home_load.json')), { seed: { user: { name: 'Ada', segment: 'gold' } } })
     await screen.load()
     expect(calls.map((c) => c[0]).sort()).toEqual(['getBalance', 'getPromos'])   // both started before either finished
@@ -119,7 +119,7 @@ describe('ScreenController', () => {
     const network = fakeNetwork({ createTransfer: { id: 'T1' } }, calls)
     const host = { native: vi.fn(async () => ({ confirmed: true })) }
     const navigator = { dismiss: vi.fn() }
-    const engine = createEngine({ actionDispatcher: new ActionDispatcher({ network, host, navigator }) })
+    const engine = devEngine({ actionDispatcher: new ActionDispatcher({ network, host, navigator }) })
     const screen = engine.screen(ScreenSource.inline(fixture('valid/transfer_form.json')))
     await screen.load()
     const send = () => find(screen.render().nodes, (n) => n.element === 'button')!.on!.click!
@@ -150,7 +150,7 @@ describe('ScreenController', () => {
   })
 
   it('native: no host → onError', async () => {
-    const engine = createEngine()
+    const engine = devEngine()
     const screen = engine.screen(ScreenSource.inline(payload({ type: 'button', props: { title: 'x' }, action: { type: 'native', command: 'share', onError: { type: 'toast', message: 'Not supported', level: 'warning' } } })))
     await screen.load()
     await screen.handle(screen.render().nodes[0]!.on!.click!)
@@ -166,7 +166,7 @@ describe('ScreenController', () => {
       { type: 'button', props: { title: 'b' }, action: { type: 'openURL', link: 'helpCenter' } },
       { type: 'button', props: { title: 'c' }, action: { type: 'refresh' } }
     ] }) })
-    const engine = createEngine({ screenFactory: factory, actionDispatcher: new ActionDispatcher({ navigator: { navigate, openLink } }) })
+    const engine = devEngine({ screenFactory: factory, actionDispatcher: new ActionDispatcher({ navigator: { navigate, openLink } }) })
     const screen = engine.screen(ScreenSource.key('home'))
     await screen.load()
     const [a, b, c] = screen.render().nodes[0]!.children
@@ -182,7 +182,7 @@ describe('ScreenController', () => {
   it('variants follow the viewport width', async () => {
     let width = 375
     const listeners = new Set<() => void>()
-    const engine = createEngine({ viewport: { width: () => width, subscribe: (l) => { listeners.add(l); return () => listeners.delete(l) } } })
+    const engine = devEngine({ viewport: { width: () => width, subscribe: (l) => { listeners.add(l); return () => listeners.delete(l) } } })
     const screen = engine.screen(ScreenSource.inline(fixture('valid/home_load.json')), { seed: { user: { name: 'Ada' } } })
     await screen.load()
     expect(screen.render().nodes[0]!.type).toBe('scroll')
@@ -194,17 +194,17 @@ describe('ScreenController', () => {
   it('unknown types: Null Object (marker only in debug) + unknown_component event', async () => {
     const events: SduiEvent[] = []
     const json = payload({ type: 'vstack', children: [{ type: 'lottie' }, { type: 'text', props: { value: 'after' } }] })
-    const quiet = createEngine({ onEvent: (e) => events.push(e) }).screen(ScreenSource.inline(json))
+    const quiet = devEngine({ onEvent: (e) => events.push(e) }).screen(ScreenSource.inline(json))
     await quiet.load()
     expect(quiet.render().nodes[0]!.children.map((n) => n.type)).toEqual(['text'])
     expect(events.some((e) => e.type === 'unknown_component')).toBe(true)
-    const debug = createEngine({ debug: true }).screen(ScreenSource.inline(json))
+    const debug = devEngine({ debug: true }).screen(ScreenSource.inline(json))
     await debug.load()
     expect(text(debug.render().nodes)).toContain('unknown: lottie')
   })
 
   it('slots: a toolkit type renders as a slot node when the adapter claims it', async () => {
-    const screen = createEngine().screen(ScreenSource.inline(payload({ type: 'chart', props: { series: [1, 2] } })))
+    const screen = devEngine().screen(ScreenSource.inline(payload({ type: 'chart', props: { series: [1, 2] } })))
     await screen.load()
     expect(screen.render({ slots: ['chart'] }).nodes[0]!.slot).toEqual({ type: 'chart', props: { series: [1, 2] }, data: {} })
   })
@@ -221,7 +221,8 @@ describe('cache tiers (unsigned)', () => {
     engine.coordinator!.purgeRenderCache()
     const third = await engine.load(ScreenSource.key('home'))
     expect([first, second, third].map((s) => s.kind === 'loaded' && s.origin)).toEqual(['network', 'memory', 'cache'])
-    expect(fetches.count).toBe(1)
+    await engine.settled()
+    expect(fetches.count).toBe(2)   // no manifest: the disk hit is revalidated in the background
     expect(await store.data(cacheKey('home', 'unversioned'))).toBeDefined()
   })
 })

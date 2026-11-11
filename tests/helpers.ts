@@ -45,3 +45,11 @@ export class Counter {
 
 /// Wait for pending promises/microtasks.
 export const flush = () => new Promise((r) => setTimeout(r, 0))
+
+import { PayloadSecurity, createEngine, type EngineInit } from '../src/core'
+
+/// An engine that explicitly accepts unsigned payloads (development) — the
+/// default without `security` is fail-closed.
+export function devEngine(init: EngineInit = {}) {
+  return createEngine({ security: PayloadSecurity.insecureDevelopment, ...init })
+}

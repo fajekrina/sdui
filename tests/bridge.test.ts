@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Bridge, applyTheme, detectHost, nativeBridgePorts, verifyBundleManifest, type BridgeTransport } from '../src/bridge'
 import { webCryptoEd25519 } from '../src/browser'
 import { ActionDispatcher, ActionSpec, ScreenSource, SduiError, createEngine, hex, sortedJSONStringify, utf8 } from '../src/core'
-import { envelopeJSON, flush, signingKey } from './helpers'
+import { envelopeJSON, flush, signingKey , devEngine } from './helpers'
 
 /// A fake native host: records requests and answers by method.
 function fakeHost(answer: (method: string, params: Record<string, unknown>) => unknown | Error) {
@@ -66,7 +66,7 @@ describe('native bridge', () => {
   it('host events: back → dismiss via the screen; viewport updates', async () => {
     const host = fakeHost(() => null)
     const ports = nativeBridgePorts({ transport: host.transport })
-    const engine = createEngine({ actionDispatcher: new ActionDispatcher({ navigator: ports.navigator, host: ports.host }), viewport: ports.viewport })
+    const engine = devEngine({ actionDispatcher: new ActionDispatcher({ navigator: ports.navigator, host: ports.host }), viewport: ports.viewport })
     const screen = engine.screen(ScreenSource.inline('{"schemaVersion":"1.1","screen":{"key":"s","root":{"type":"text"}}}'))
     await screen.load()
     ports.onHostEvent('host.back', () => { void screen.dispatch(new ActionSpec({ type: 'dismiss' })) })

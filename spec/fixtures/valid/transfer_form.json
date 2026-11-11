@@ -12,7 +12,7 @@
         { "type": "textField", "props": { "name": "amount", "label": "Amount", "keyboard": "number", "required": true, "pattern": "amount" } },
         { "type": "picker", "props": { "name": "purpose", "label": "Purpose", "options": [ { "value": "family", "label": "Family" }, { "value": "bills", "label": "Bills" } ] } },
         { "type": "textArea", "props": { "name": "note", "label": "Note", "maxLength": 140 } },
-        { "type": "textField", "props": { "name": "pin", "label": "PIN", "secure": true, "required": true, "pattern": "pin6" } },
+        { "type": "textField", "props": { "name": "pin", "label": "PIN", "secure": true, "keyboard": "number", "required": true, "pattern": "pin6" } },
         {
           "type": "button",
           "props": { "title": "Send", "a11yId": "send_button" },

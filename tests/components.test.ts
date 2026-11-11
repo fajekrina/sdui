@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { devEngine } from './helpers'
 import { ComponentFactory, ScreenSource, createEngine, type RenderNode } from '../src/core'
 
 async function render(root: object, seed: Record<string, unknown> = {}, slots?: string[]) {
-  const screen = createEngine().screen(ScreenSource.inline({ schemaVersion: '1.1', screen: { key: 's', root } }), { seed: seed as never })
+  const screen = devEngine().screen(ScreenSource.inline({ schemaVersion: '1.1', screen: { key: 's', root } }), { seed: seed as never })
   await screen.load()
   return screen.render({ slots }).nodes[0]!
 }
@@ -90,7 +91,7 @@ describe('built-in components', () => {
 
 describe('preview (non-interactive) has no handlers or field bindings', () => {
   it('drops on/field', async () => {
-    const screen = createEngine().screen(ScreenSource.inline({ schemaVersion: '1.1', screen: { key: 's', root: { type: 'form', children: [{ type: 'textField', props: { name: 'a' } }, { type: 'button', props: { title: 'x' }, action: { type: 'dismiss' } }] } } }))
+    const screen = devEngine().screen(ScreenSource.inline({ schemaVersion: '1.1', screen: { key: 's', root: { type: 'form', children: [{ type: 'textField', props: { name: 'a' } }, { type: 'button', props: { title: 'x' }, action: { type: 'dismiss' } }] } } }))
     await screen.load()
     const walk = (n: RenderNode): RenderNode[] => [n, ...n.children.flatMap(walk)]
     const all = walk(screen.render({ interactive: false }).nodes[0]!)

@@ -2,7 +2,7 @@ import { DataContext } from './data-context'
 import { RenderContext, type RenderEnvironment } from './render-context'
 import { createUiStore, type UiStore } from './ui-store'
 import { renderNode, type RenderNode, type RenderResult } from './render-node'
-import { validateField, type FieldRule } from './patterns'
+import { MESSAGES_EN, validateField, type FieldRule } from './patterns'
 import { resolveValue } from './token'
 import { SduiValue, type SduiProps } from './value'
 import { parseJSON } from './payload'
@@ -43,6 +43,9 @@ export class ScreenController {
   private abort?: AbortController
   private readonly unsubscribers: Array<() => void> = []
   private loadToken = 0
+  /// actions in flight: handler keys and `form:<id>` locks (double-tap guard)
+  private readonly inFlight = new Set<string>()
+  private tapSeq = 0
 
   constructor(readonly engine: SduiEngine, readonly source: ScreenSource, seed: Record<string, SduiValue> = {}) {
     this.data = new DataContext(seed)
@@ -75,7 +78,15 @@ export class ScreenController {
     this.abort = typeof AbortController !== 'undefined' ? new AbortController() : undefined
     this.state = { kind: 'loading' }
     this.changed()
-    const next = await this.engine.load(this.source, { signal: this.abort?.signal })
+    const next = await this.engine.load(this.source, {
+      signal: this.abort?.signal,
+      // stale-while-revalidate: a newer screen replaces the cached one in place
+      onUpdate: (screen) => {
+        if (token !== this.loadToken) return
+        this.state = { kind: 'loaded', screen, origin: 'network' }
+        this.changed()
+      }
+    })
     if (token !== this.loadToken) return next
     this.state = next
     this.changed()
@@ -125,6 +136,7 @@ export class ScreenController {
       loading: this.pendingLoads > 0,
       assetURL: this.engine.assetURL,
       slots: new Set(options.slots ?? []),
+      busy: (key, formId) => this.inFlight.has(key) || (formId !== undefined && this.inFlight.has(`form:${formId}`)),
       sink: {
         bindAction: (key, action, data, formId) => {
           this.handlers.set(key, { action, data, formId })
@@ -158,37 +170,53 @@ export class ScreenController {
 
   /// A click on a RenderNode handler key. Inside a form, the form's fields are
   /// validated first; the action only runs when they all pass.
-  handle(key: string): Promise<void> {
+  ///
+  /// Double-tap guard: while a handler's action chain runs (and, inside a form,
+  /// while any of that form's actions runs) further taps are ignored and the
+  /// button renders disabled + `aria-busy`.
+  async handle(key: string): Promise<void> {
     const handler = this.handlers.get(key)
-    if (!handler) return Promise.resolve()
+    if (!handler) return
+    const formLock = handler.formId ? `form:${handler.formId}` : undefined
+    if (this.inFlight.has(key) || (formLock && this.inFlight.has(formLock))) return
     let data = handler.data
     if (handler.formId) {
       const formId = handler.formId
       const values = this.ui.getState().forms[formId]?.values ?? {}
       const errors: Record<string, string> = {}
       for (const rule of this.fieldRules.get(formId) ?? []) {
-        const error = validateField(rule, values[rule.name] ?? '')
+        const error = validateField(rule, values[rule.name] ?? '', this.engine.messages)
         if (error) errors[rule.name] = error
       }
       this.ui.setErrors(formId, errors)
       if (Object.keys(errors).length > 0) {
         this.engine.emit({ type: 'form_invalid', formId, fields: Object.keys(errors) })
-        return Promise.resolve()
+        return
       }
       data = new DataContext({ ...handler.data.snapshot, form: values })
       // results merged during the chain (api/native) must reach the screen data too
       const original = data.merge.bind(data)
       data.merge = (v) => { original(v); this.data.merge(v) }
     }
-    return this.dispatch(handler.action, data)
+    this.inFlight.add(key)
+    if (formLock) this.inFlight.add(formLock)
+    this.changed()
+    try {
+      await this.dispatch(handler.action, data, `${Date.now().toString(36)}-${(++this.tapSeq).toString(36)}-${Math.random().toString(36).slice(2, 10)}`)
+    } finally {
+      this.inFlight.delete(key)
+      if (formLock) this.inFlight.delete(formLock)
+      this.changed()
+    }
   }
 
   /// Run an action against this screen's data (also used by hosts: e.g. the
   /// Android back button dispatches `{ type: 'dismiss' }`).
-  dispatch(action: ActionSpec, data: DataContext = this.data): Promise<void> {
+  dispatch(action: ActionSpec, data: DataContext = this.data, idempotencyKey?: string): Promise<void> {
     const dispatcher = this.engine.actionDispatcher
     const context: ActionContext = {
       data,
+      idempotencyKey,
       network: dispatcher.network,
       navigator: dispatcher.navigator,
       host: dispatcher.host,

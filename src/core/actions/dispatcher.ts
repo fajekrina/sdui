@@ -8,6 +8,8 @@ import type { ActionSpec, ActionType, ToastLevel } from './spec'
 /// What a command can touch while it runs — everything else stays out of reach.
 export interface ActionContext {
   data: DataContext
+  /// one per user tap; each `api` call in the chain derives its own from it
+  idempotencyKey?: string
   network: NetworkClient
   navigator: Navigator
   host: HostPort
@@ -78,7 +80,8 @@ class APICommand implements Command {
     if (spec.request === undefined) return this.fail(spec, ctx, d)
     let bytes: Uint8Array
     try {
-      bytes = await ctx.network.perform(new NamedRequest(spec.request), params(spec, ctx.data))
+      const idempotencyKey = ctx.idempotencyKey ? `${ctx.idempotencyKey}:${spec.request}` : undefined
+      bytes = await ctx.network.perform(new NamedRequest(spec.request), params(spec, ctx.data), { idempotencyKey })
     } catch {
       return this.fail(spec, ctx, d)
     }

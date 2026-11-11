@@ -8,7 +8,7 @@ import { ScreenSource, createEngine } from '../src/core'
 import { SduiScreen as ReactScreen } from '../src/react'
 import { SduiScreen as VueScreen } from '../src/vue'
 import { mount } from '../src/vanilla'
-import { fixture, flush } from './helpers'
+import { fixture, flush , devEngine } from './helpers'
 
 const FIXTURES = ['valid/dashboard.json', 'valid/login.json', 'valid/transfer_form.json', 'valid/home_load.json', 'valid/third_party_lottie.json']
 const SEED = { user: { name: 'Ada', segment: 'gold' }, getBalance: { amount: 1250 }, getPromos: { items: [{ title: 'Cashback' }] } }
@@ -30,7 +30,7 @@ function normalize(root: Element): string {
 }
 
 async function reactDOM(source: Uint8Array): Promise<string> {
-  const engine = createEngine()
+  const engine = devEngine()
   let container!: HTMLElement
   await act(async () => {
     container = renderReact(<ReactScreen engine={engine} source={ScreenSource.inline(source)} seed={SEED} />).container
@@ -42,7 +42,7 @@ async function reactDOM(source: Uint8Array): Promise<string> {
 }
 
 async function vueDOM(source: Uint8Array): Promise<string> {
-  const engine = createEngine()
+  const engine = devEngine()
   const host = document.createElement('div')
   document.body.appendChild(host)
   const app = createApp({ render: () => h(VueScreen, { engine, source: ScreenSource.inline(source), seed: SEED }) })
@@ -55,7 +55,7 @@ async function vueDOM(source: Uint8Array): Promise<string> {
 }
 
 async function vanillaDOM(source: Uint8Array): Promise<string> {
-  const engine = createEngine()
+  const engine = devEngine()
   const host = document.createElement('div')
   document.body.appendChild(host)
   const view = mount(host, { engine, source: ScreenSource.inline(source), seed: SEED })
@@ -78,7 +78,7 @@ describe('renderer parity', () => {
 
 describe('interaction through each renderer', () => {
   it('React: typing + click runs the form action', async () => {
-    const engine = createEngine()
+    const engine = devEngine()
     const payload = { schemaVersion: '1.1', screen: { key: 's', root: { type: 'form', id: 'f', children: [
       { type: 'textField', props: { name: 'who', required: true } },
       { type: 'button', props: { title: 'Go' }, action: { type: 'toast', message: 'Hi {{form.who}}' } }
@@ -97,7 +97,7 @@ describe('interaction through each renderer', () => {
   })
 
   it('vanilla: typing keeps focus; click runs the action', async () => {
-    const engine = createEngine()
+    const engine = devEngine()
     const host = document.createElement('div')
     document.body.appendChild(host)
     const payload = { schemaVersion: '1.1', screen: { key: 's', root: { type: 'form', id: 'f', children: [

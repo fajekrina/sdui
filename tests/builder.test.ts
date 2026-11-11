@@ -31,7 +31,7 @@ describe('DSL', () => {
       textField({ name: 'amount', label: 'Amount', keyboard: 'number', required: true, pattern: 'amount' }),
       DSL.picker({ name: 'purpose', label: 'Purpose', options: [{ value: 'family', label: 'Family' }, { value: 'bills', label: 'Bills' }] }),
       DSL.textArea({ name: 'note', label: 'Note', maxLength: 140 }),
-      textField({ name: 'pin', label: 'PIN', secure: true, required: true, pattern: 'pin6' }),
+      textField({ name: 'pin', label: 'PIN', secure: true, keyboard: 'number', required: true, pattern: 'pin6' }),
       button('Send', native('biometricConfirm', {
         params: { reason: 'Confirm transfer of {{form.amount}}' },
         onSuccess: api('createTransfer', {

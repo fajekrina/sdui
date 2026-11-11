@@ -1,4 +1,4 @@
-import { DataContext, RenderContext, type ComponentFactory, type RenderNode, type SduiNode, type SduiValue } from '../core'
+import { DataContext, RenderContext, relativeAssetURL, type ComponentFactory, type RenderNode, type SduiNode, type SduiValue } from '../core'
 
 /// Render a node tree for the builder canvas with the SAME components the client
 /// uses (preview == client), non-interactive, every node tagged with
@@ -10,7 +10,7 @@ export function renderPreview(factory: ComponentFactory, root: SduiNode, options
     interactive: false,
     debug: true,
     loading: false,
-    assetURL: options.assetURL ?? ((name) => name),
+    assetURL: options.assetURL ?? relativeAssetURL,
     slots: new Set(),
     sink: { bindAction: (key) => key, registerField: () => {}, unknownComponent: () => {} }
   })

@@ -11,4 +11,5 @@ export type SduiEvent =
   | { type: 'load_request'; request: string; ok: boolean; ms: number }
   | { type: 'form_invalid'; formId: string; fields: string[] }
   | { type: 'rollback_rejected'; sequence: number }
+  | { type: 'screen_revalidated'; key: string; changed: boolean; error?: string }
   | { type: 'bridge_error'; method: string; message: string }

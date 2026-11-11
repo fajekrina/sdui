@@ -27,7 +27,9 @@ export class NamedRequest {
 /// The networking Strategy: given an allow-listed named request + params, return
 /// the response bytes. Failures surface as `SduiError.network` / `SduiError.http`.
 export interface NetworkClient {
-  perform(request: NamedRequest, params: SduiProps, options?: { signal?: AbortSignal }): Promise<Bytes>
+  /// `idempotencyKey`: unique per user tap (+ request); send it so the backend can
+  /// drop duplicates (`Idempotency-Key` header in `fetchNetworkClient`).
+  perform(request: NamedRequest, params: SduiProps, options?: { signal?: AbortSignal; idempotencyKey?: string }): Promise<Bytes>
 }
 
 /// The default when no client is wired: every request is (correctly) unknown, so

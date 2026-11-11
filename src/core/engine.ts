@@ -1,5 +1,7 @@
 import { ActionDispatcher } from './actions/dispatcher'
 import { SduiError } from './errors'
+import { canonical } from './actions/spec'
+import { MESSAGES_EN, type FieldMessages } from './patterns'
 import { SduiPayload, SduiEnvelope, parseJSON, type ScreenSpec } from './payload'
 import { SchemaValidator } from './validator'
 import { PayloadSecurity } from './security'
@@ -65,8 +67,12 @@ export interface EngineInit {
   namedResolver?: (name: string) => Promise<BytesLike>
   /// fetches the signed version manifest
   manifestLoader?: () => Promise<BytesLike>
-  /// maps an image `name` to a URL (default: the name, relative to the document)
+  /// maps an image `name` to a URL. Default: a RELATIVE path only — absolute
+  /// URLs (`https:`, `//host`, `data:` …) are refused, so a payload can't load
+  /// images from an arbitrary host. Map names to your CDN here.
   assetURL?: (name: string) => string
+  /// localized field-validation messages (default English; `MESSAGES_ID` ships)
+  messages?: Partial<FieldMessages>
   /// layout width, for `screen.variants`
   viewport?: ViewportPort
   /// observability hook
@@ -92,27 +98,42 @@ export class SduiEngine {
   readonly viewport?: ViewportPort
   readonly logger: Logger
   readonly debug: boolean
+  readonly messages: FieldMessages
   private readonly namedResolver?: (name: string) => Promise<BytesLike>
   private readonly manifestLoader?: () => Promise<BytesLike>
   private readonly onEvent?: (event: SduiEvent) => void
+  private manifestRestored?: Promise<void>
+  private readonly revalidating = new Map<string, Promise<void>>()
+  private readonly revalidatedAt = new Map<string, number>()
 
   constructor(init: EngineInit = {}) {
     this.componentFactory = init.componentFactory ?? ComponentFactory.withBuiltins()
     this.screenFactory = init.screenFactory ?? new ScreenFactory()
     this.actionDispatcher = init.actionDispatcher ?? new ActionDispatcher()
     this.validator = init.validator ?? new SchemaValidator()
-    this.security = init.security ?? PayloadSecurity.insecureDevelopment
+    this.logger = init.logger ?? consoleLogger
+    this.debug = init.debug ?? false
+    if (init.security) {
+      this.security = init.security
+    } else if (this.debug) {
+      // debug build without a policy: unsigned payloads, said out loud
+      this.security = PayloadSecurity.insecureDevelopment
+      this.logger.warn('[sdui] no PayloadSecurity configured: accepting UNSIGNED payloads (debug only). Pass PayloadSecurity.signed(verifier) for production.')
+    } else {
+      // release build without a policy: fail closed, never silently insecure
+      this.security = PayloadSecurity.signed({ verify: () => false })
+      this.logger.error('[sdui] no PayloadSecurity configured: every payload is REJECTED. Pass PayloadSecurity.signed(verifier), or PayloadSecurity.insecureDevelopment explicitly in development.')
+    }
     if (init.cache) {
       this.cache = init.cache
       this.coordinator = new CacheCoordinator(init.cache.renderCacheLimit)
     }
     this.namedResolver = init.namedResolver
     this.manifestLoader = init.manifestLoader
-    this.assetURL = init.assetURL ?? ((name) => name)
+    this.assetURL = init.assetURL ?? relativeAssetURL
+    this.messages = { ...MESSAGES_EN, ...(init.messages ?? {}) }
     this.viewport = init.viewport
     this.onEvent = init.onEvent
-    this.logger = init.logger ?? consoleLogger
-    this.debug = init.debug ?? false
   }
 
   /// Report an observability event (never throws).
@@ -128,7 +149,11 @@ export class SduiEngine {
   /// Resolve a source to its screen, failing closed on any error. Key sources go
   /// through the cache tiers (render → persistent → fetch, with an offline
   /// last-good fallback); other sources fetch and materialize directly.
-  async load(source: ScreenSource, options: { signal?: AbortSignal } = {}): Promise<LoadState> {
+  ///
+  /// Without a manifest the cached version can't be known to be current, so a
+  /// cached screen is served stale-while-revalidate: shown at once, re-fetched in
+  /// the background, and `onUpdate` receives the newer screen if it changed.
+  async load(source: ScreenSource, options: LoadOptions = {}): Promise<LoadState> {
     const started = Date.now()
     try {
       let state: LoadState
@@ -150,12 +175,36 @@ export class SduiEngine {
   /// Fetch the signed manifest, verify it, and apply it. An older `sequence` is
   /// rejected (anti-rollback) and reported, never applied.
   async refreshManifest(): Promise<void> {
-    if (!this.coordinator || !this.manifestLoader) return
+    const cache = this.cache
+    if (!this.coordinator || !this.manifestLoader || !cache) return
+    await this.restoreManifest()
     const raw = toBytes(await this.manifestLoader())
     const manifest = Manifest.fromJSON(await this.unwrap(raw))   // verify signature
     if (!this.coordinator.apply(manifest)) {
       this.emit({ type: 'rollback_rejected', sequence: manifest.sequence })
+      return
     }
+    // persist the applied manifest: the highest sequence survives a restart
+    const sealed = await Promise.resolve().then(() => cache.cipher.seal(raw)).catch(() => undefined)
+    if (sealed) await cache.store.store(sealed, MANIFEST_KEY)
+  }
+
+  /// Re-apply the last persisted manifest (re-verified) once per engine, so the
+  /// anti-rollback floor and the screen versions survive a restart.
+  private restoreManifest(): Promise<void> {
+    this.manifestRestored ??= (async () => {
+      const cache = this.cache
+      if (!cache || !this.coordinator) return
+      const sealed = await cache.store.data(MANIFEST_KEY)
+      if (!sealed) return
+      try {
+        const manifest = Manifest.fromJSON(await this.unwrap(await cache.cipher.open(sealed)))
+        this.coordinator.apply(manifest)
+      } catch {
+        await cache.store.remove(MANIFEST_KEY)   // tampered: drop it rather than trust it
+      }
+    })()
+    return this.manifestRestored
   }
 
   /// Warm the cache for the given screen keys.
@@ -171,12 +220,17 @@ export class SduiEngine {
     return payload.screen
   }
 
-  private async loadCached(screenKey: string, cache: SduiCache, coordinator: CacheCoordinator, options: { signal?: AbortSignal }): Promise<{ screen: ScreenSpec; origin: LoadOrigin }> {
-    const version = coordinator.version(screenKey) ?? 'unversioned'
+  private async loadCached(screenKey: string, cache: SduiCache, coordinator: CacheCoordinator, options: LoadOptions): Promise<{ screen: ScreenSpec; origin: LoadOrigin }> {
+    await this.restoreManifest()
+    const known = coordinator.version(screenKey)
+    const version = known ?? 'unversioned'
     const key = cacheKey(screenKey, version)
 
     const rendered = coordinator.renderCached(key)                                     // memory tier
-    if (rendered) return { screen: rendered, origin: 'memory' }
+    if (rendered) {
+      if (known === undefined) this.revalidate(screenKey, key, rendered, cache, coordinator, options, REVALIDATE_MEMORY_MS)
+      return { screen: rendered, origin: 'memory' }
+    }
 
     const sealed = await cache.store.data(key)                                         // persistent tier
     if (sealed) {
@@ -184,6 +238,7 @@ export class SduiEngine {
       if (screen) {
         coordinator.storeRender(screen, key)
         coordinator.markGood(screenKey, version)
+        if (known === undefined) this.revalidate(screenKey, key, screen, cache, coordinator, options, 0)
         return { screen, origin: 'cache' }
       }
       await cache.store.remove(key)                                                    // tampered → evict
@@ -216,7 +271,42 @@ export class SduiEngine {
       coordinator.markGood(screenKey, version)
     }
     coordinator.storeRender(screen, key)
+    this.revalidatedAt.set(screenKey, Date.now())             // fresh: no background re-check needed now
     return { screen, origin: 'network' }
+  }
+
+  /// Background re-fetch of an unversioned cached screen (stale-while-revalidate).
+  /// A newer, verified screen replaces the cache entry and reaches `onUpdate`;
+  /// failures leave the cached screen in place. One in flight per key.
+  private revalidate(screenKey: string, key: string, current: ScreenSpec, cache: SduiCache, coordinator: CacheCoordinator, options: LoadOptions, minIntervalMs: number): void {
+    const last = this.revalidatedAt.get(screenKey) ?? 0
+    if (this.revalidating.has(screenKey) || (minIntervalMs > 0 && Date.now() - last < minIntervalMs)) return
+    this.revalidatedAt.set(screenKey, Date.now())
+    const job = (async () => {
+      try {
+        const raw = await this.screenFactory.data(screenKey, { signal: options.signal })
+        const screen = await this.materialize(raw)
+        if (JSON.stringify(canonical(screen.toJSON())) === JSON.stringify(canonical(current.toJSON()))) {
+          this.emit({ type: 'screen_revalidated', key: screenKey, changed: false })
+          return
+        }
+        const sealed = await Promise.resolve().then(() => cache.cipher.seal(raw)).catch(() => undefined)
+        if (sealed) await cache.store.store(sealed, key)
+        coordinator.storeRender(screen, key)
+        this.emit({ type: 'screen_revalidated', key: screenKey, changed: true })
+        options.onUpdate?.(screen)
+      } catch (error) {
+        this.emit({ type: 'screen_revalidated', key: screenKey, changed: false, error: error instanceof SduiError ? error.kind : 'decode' })
+      } finally {
+        this.revalidating.delete(screenKey)
+      }
+    })()
+    this.revalidating.set(screenKey, job)
+  }
+
+  /// Resolves when background revalidations have finished.
+  async settled(): Promise<void> {
+    await Promise.all([...this.revalidating.values()])
   }
 
   private async materializeSealed(sealed: Uint8Array, cache: SduiCache): Promise<ScreenSpec> {
@@ -250,6 +340,24 @@ export class SduiEngine {
     }
   }
 }
+
+/// The default asset mapping: relative paths only (no scheme, no `//host`,
+/// no `..` segments); anything else renders without a `src`.
+export function relativeAssetURL(name: string): string {
+  if (!name || /^[a-z][a-z0-9+.-]*:/i.test(name) || name.startsWith('//') || name.startsWith('\\') ||
+      name.split(/[\\/]/).some((seg) => seg === '..')) return ''
+  return name
+}
+
+export interface LoadOptions {
+  signal?: AbortSignal
+  /// stale-while-revalidate: a newer screen found in the background
+  onUpdate?: (screen: ScreenSpec) => void
+}
+
+const MANIFEST_KEY = 'sdui:manifest'
+/// memory hits of unversioned screens re-check the backend at most this often
+const REVALIDATE_MEMORY_MS = 30_000
 
 /// `createEngine({...})` — the functional entry point.
 export function createEngine(init: EngineInit = {}): SduiEngine {

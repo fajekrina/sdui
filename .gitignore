@@ -7,3 +7,4 @@ dist/
 docs/
 test-results/
 playwright-report/
+*.docx

@@ -36,7 +36,7 @@ npm install @fajekrina/sdui
 ## Quickstart (browser)
 
 ```ts
-import { ActionDispatcher, PayloadSecurity, ScreenFactory, SduiCache, createEngine } from '@fajekrina/sdui'
+import { ActionDispatcher, MESSAGES_ID, PayloadSecurity, ScreenFactory, SduiCache, createEngine } from '@fajekrina/sdui'
 import { browserNavigator, fetchNetworkClient, indexedDbStore, universalScreenProvider, webCryptoEd25519, windowViewport } from '@fajekrina/sdui/browser'
 
 const engine = createEngine({
@@ -50,7 +50,9 @@ const engine = createEngine({
     }),
     navigator: browserNavigator({ navigate: (screen, params) => router.push({ name: screen, query: params }), links: { helpCenter: 'https://help.example.com' } })
   }),
-  security: PayloadSecurity.signed(await webCryptoEd25519(EMBEDDED_PUBLIC_KEY)),
+  security: PayloadSecurity.signed(await webCryptoEd25519(EMBEDDED_PUBLIC_KEY)),   // required: none = reject all
+  assetURL: (name) => `https://cdn.example.com/sdui/${name}.webp`,
+  messages: MESSAGES_ID,
   cache: new SduiCache({ store: indexedDbStore() }),
   viewport: windowViewport()
 })
@@ -122,6 +124,13 @@ Toolkit-specific widgets (a React chart, a map) go through slots:
 `<SduiScreen slots={{ chart: (slot) => <Chart data={slot.props.series} /> }} />`.
 
 ## Security model
+
+Without `security`, a release engine **rejects every payload** (fail-closed); development
+says `PayloadSecurity.insecureDevelopment` out loud. Without a manifest, cached screens are
+served stale-while-revalidate; the applied manifest (and its anti-rollback `sequence`) is
+persisted across restarts. Each tap is locked while its action runs and carries an
+`Idempotency-Key`. Image names resolve to relative paths only unless you map them.
+
 
 Closed action vocabulary with **named** targets (never a raw URL); bounded validation
 (depth 32, nodes 5000, strings 4096, chain 4, load 8); Ed25519 envelopes verified on

@@ -61,6 +61,22 @@ Replies must arrive within 15 s or the call fails (and the payload's `onError` r
 4. **Certificate pinning** does not apply to WebView traffic; an endpoint that must be
    pinned is called through a `native` command.
 5. Responses marked `Cache-Control: no-store`; the engine never caches `api` results.
+6. **Idempotency.** Every user tap carries an `Idempotency-Key` header on write requests
+   (`<tap>:<request>`); the backend must reject duplicates (double taps, retries).
+7. **Host events are allow-listed** on the web side (`host.back`, `host.theme`,
+   `host.viewport`) and replies must match a pending request id. A script running on the
+   bundle origin could still post an allow-listed event — the strict CSP above (no
+   third-party or inline scripts) is what keeps such scripts out.
+
+### Host checklist
+
+- [ ] The engine is created with `PayloadSecurity.signed(...)` (without it, release builds reject every payload).
+- [ ] The payload public key(s) and the bundle public key are embedded; they are different keys.
+- [ ] The highest applied bundle `sequence` is **persisted** (Keystore/Keychain-backed storage) and checked at
+      start; an older bundle is rejected even after a reinstall-free restart.
+- [ ] `auth.token` returns minutes-long tokens with a narrow audience.
+- [ ] Only the fixed local origin may use the bridge; file access off.
+- [ ] `native.command` only runs allow-listed commands.
 
 ## Bundle distribution (downloaded and cached)
 
@@ -69,7 +85,8 @@ Replies must arrive within 15 s or the call fails (and the payload's `onError` r
    → `bundle-manifest.json`: an envelope over `{ version, sequence, files: { path: sha256 }, minBridge, minHost }`,
    signed with the **bundle key** (not the payload key).
 2. The host downloads the manifest and files, verifies the signature with the public
-   key embedded in the app, every file hash, `sequence ≥ last` (anti-rollback),
+   key embedded in the app, every file hash, `sequence ≥ last` (anti-rollback — `last`
+   is persisted across restarts),
    `minBridge ≤ host bridge`, and only then stores them. On failure it keeps the
    last-good bundle; with none, the minimal bundle shipped inside the app.
    `verifyBundleManifest()` (`src/bridge/bundle-manifest.ts`) is the reference

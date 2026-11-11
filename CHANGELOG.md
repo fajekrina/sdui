@@ -3,6 +3,35 @@
 Semua perubahan penting paket ini dicatat di sini. Format mengikuti Keep a Changelog;
 versi mengikuti Semantic Versioning (0.x: breaking change boleh di minor dengan catatan jelas).
 
+## [0.5.0] — 2026-11-11 · BREAKING (default keamanan)
+
+Menutup temuan review 0.4.0 (1–10). Setiap temuan punya tes regresi di `tests/review-0.4.test.ts`.
+
+### Diubah
+- **#4 Default keamanan fail-closed.** `createEngine()` tanpa `security` kini **menolak semua payload** (release) dan
+  menulis `logger.error`; dengan `debug: true` menerima payload tak bertanda tangan dengan peringatan keras. Untuk
+  development tulis `PayloadSecurity.insecureDevelopment` secara eksplisit.
+- **#7** `secure: true` tidak lagi memaksa keyboard numerik; jenis keyboard hanya dari `keyboard`
+  (fixture `transfer_form`: PIN kini `keyboard: "number"`).
+
+### Diperbaiki
+- **#1 Layout basi tanpa manifest.** Bila cache aktif tetapi versi layar belum diketahui, layar dari cache disajikan
+  *stale-while-revalidate*: tampil seketika, diambil ulang di belakang (`engine.settled()`), versi baru menggantikan
+  layar yang sedang tampil lewat `onUpdate`, event `screen_revalidated`. Hit memori direvalidasi paling sering 30 dtk.
+- **#2 Anti-rollback setelah restart.** Manifest yang diterapkan disimpan (tersegel cipher) di `CacheStore` dan
+  diterapkan ulang (diverifikasi ulang) saat engine mulai; manifest lama setelah restart ditolak.
+- **#3 Tap ganda.** `screen.handle` mengunci handler (dan form-nya) selama rantai aksi berjalan; tombol dirender
+  `disabled` + `aria-busy`. Setiap tap membawa **idempotency key** (per request) → header `Idempotency-Key` untuk
+  metode tulis di `fetchNetworkClient`.
+- **#5 Path endpoint.** `{param}` kosong/hilang, `.`, atau `..` menggagalkan request sebelum dikirim.
+- **#6 URL gambar.** `assetURL` bawaan (`relativeAssetURL`) menolak URL absolut, `//host`, `data:`, dan `..`;
+  petakan nama ke CDN lewat `assetURL`.
+- **#8** `auth.token` paralel di-dedupe (satu permintaan in-flight).
+- **#9** Penerima iOS `window.sduiBridge` dibekukan dan tak bisa diganti; event host di-allow-list
+  (`host.back`, `host.theme`, `host.viewport`); balasan harus cocok dengan id yang sedang ditunggu.
+- **#10** Pesan validasi bisa dilokalkan: `createEngine({ messages })`; tersedia `MESSAGES_EN`, `MESSAGES_ID`.
+- **#11** `DESAIN-ARSITEKTUR-SDUI.docx` dikeluarkan dari repo (`*.docx` di `.gitignore`).
+
 ## [0.4.0] — 2026-11-11 · BREAKING
 
 Eksekusi **"Usulan Arsitektur SDUI: Selaras dengan Murti"**: satu spec, satu engine, tiga host.

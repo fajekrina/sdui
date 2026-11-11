@@ -26,6 +26,8 @@ export interface RenderEnvironment {
   assetURL(name: string): string
   /// toolkit-specific component types rendered by the adapter (slots)
   slots: ReadonlySet<string>
+  /// is the action behind this handler key (or its form) running? (double-tap guard)
+  busy?(key: string, formId?: string): boolean
   sink: RenderSink
 }
 
@@ -100,6 +102,15 @@ export class RenderContext {
   /// Wire an action to a click; returns the `on` map (empty when not interactive).
   onClick(node: SduiNode, action: ActionSpec | undefined): RenderNode['on'] {
     if (!action || !this.interactive) return undefined
-    return { click: this.env.sink.bindAction(`a:${this.keyFor(node)}`, action, this.data, this.formId) }
+    return { click: this.env.sink.bindAction(this.handlerKey(node), action, this.data, this.formId) }
+  }
+
+  handlerKey(node: SduiNode): string {
+    return `a:${this.keyFor(node)}`
+  }
+
+  /// true while this node's action (or its form's) is running
+  busy(node: SduiNode): boolean {
+    return this.interactive && (this.env.busy?.(this.handlerKey(node), this.formId) ?? false)
   }
 }
