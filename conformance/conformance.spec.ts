@@ -8,7 +8,15 @@ const STYLE_KEYS = ['display', 'flex-direction', 'align-items', 'gap', 'padding-
 const TOLERANCE_PX = 2
 /// Computed-value spellings that mean the same thing (engines serialize differently).
 const SAME: Record<string, string> = { 'flow-start': 'flex-start', 'flow-end': 'flex-end', start: 'flex-start', end: 'flex-end', normal: 'stretch' }
-const canon = (style: Record<string, string>) => Object.fromEntries(Object.entries(style).map(([k, v]) => [k, SAME[v] ?? v]))
+/// Flex/grid container properties only affect layout on flex/grid containers;
+/// elsewhere engines leave UA defaults (e.g. WebKit `<select>`: `unsafe center`).
+const CONTAINER_KEYS = ['align-items', 'flex-direction', 'gap']
+const canon = (style: Record<string, string>) => {
+  const container = /(^|-)(flex|grid)$/.test(style.display ?? '')
+  return Object.fromEntries(Object.entries(style)
+    .filter(([k]) => container || !CONTAINER_KEYS.includes(k))
+    .map(([k, v]) => [k, SAME[v] ?? v]))
+}
 /// The engine pair to compare. CI: chromium,webkit. `CONFORMANCE_PAIR=chromium,chromium`
 /// smoke-tests the harness where WebKit can't run (e.g. Windows without its system DLLs).
 const ENGINES: Record<string, BrowserType> = { chromium, webkit, firefox }
