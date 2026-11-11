@@ -1,4 +1,3 @@
-export { Fajrina, useSduiRuntime, default } from './Fajrina'
-export type { FajrinaProps } from './Fajrina'
-export { SduiNode } from './SduiNode'
-export * from '../core'
+// @fajekrina/sdui/react — the React renderer (thin, generic).
+export { SduiScreen, useSduiScreen, toScreenSource, type SduiScreenProps, type ScreenSourceInput } from './SduiScreen'
+export { RenderNodeView, type ReactSlots } from './RenderNodeView'

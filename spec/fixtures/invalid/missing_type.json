@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "1.0",
+  "screen": {
+    "key": "s",
+    "root": { "props": { "value": "this node has no type" } }
+  }
+}

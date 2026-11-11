@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "1.0",
+  "screen": {
+    "key": "dashboard",
+    "root": {
+      "type": "vstack",
+      "props": { "spacing": 12, "alignment": "leading" },
+      "children": [
+        { "type": "text", "props": { "value": "Hello, {{user.name}}", "style": "title" } },
+        {
+          "type": "button",
+          "props": { "title": "View details", "a11yId": "details_button" },
+          "action": {
+            "type": "navigate",
+            "screen": "productDetail",
+            "params": { "productId": "abc123" }
+          }
+        },
+        {
+          "type": "button",
+          "props": { "title": "Load balance" },
+          "action": {
+            "type": "api",
+            "request": "getAccountBalance",
+            "onSuccess": { "type": "navigate", "screen": "balanceDetail" }
+          }
+        }
+      ]
+    }
+  }
+}

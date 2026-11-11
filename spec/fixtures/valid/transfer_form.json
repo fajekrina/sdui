@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.1",
+  "screen": {
+    "key": "transferForm",
+    "root": {
+      "type": "form",
+      "id": "transfer",
+      "props": { "padding": 16, "spacing": 12 },
+      "children": [
+        { "type": "text", "props": { "value": "Transfer", "style": "title", "weight": "bold" } },
+        { "type": "textField", "props": { "name": "account", "label": "Destination account", "required": true, "pattern": "numeric", "minLength": 10, "maxLength": 16 } },
+        { "type": "textField", "props": { "name": "amount", "label": "Amount", "keyboard": "number", "required": true, "pattern": "amount" } },
+        { "type": "picker", "props": { "name": "purpose", "label": "Purpose", "options": [ { "value": "family", "label": "Family" }, { "value": "bills", "label": "Bills" } ] } },
+        { "type": "textArea", "props": { "name": "note", "label": "Note", "maxLength": 140 } },
+        { "type": "textField", "props": { "name": "pin", "label": "PIN", "secure": true, "required": true, "pattern": "pin6" } },
+        {
+          "type": "button",
+          "props": { "title": "Send", "a11yId": "send_button" },
+          "action": {
+            "type": "native",
+            "command": "biometricConfirm",
+            "params": { "reason": "Confirm transfer of {{form.amount}}" },
+            "onSuccess": {
+              "type": "api",
+              "request": "createTransfer",
+              "params": { "account": "{{form.account}}", "amount": "{{form.amount}}", "purpose": "{{form.purpose}}" },
+              "onSuccess": { "type": "toast", "message": "Sent {{form.amount}}", "level": "success", "onSuccess": { "type": "dismiss" } },
+              "onError": { "type": "toast", "message": "Transfer failed", "level": "error" }
+            },
+            "onError": { "type": "toast", "message": "Confirmation cancelled", "level": "warning" }
+          }
+        }
+      ]
+    }
+  }
+}

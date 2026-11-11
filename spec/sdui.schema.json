@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/fajekrina/sdui/main/spec/sdui.schema.json",
+  "title": "SDUI Payload (v1.1)",
+  "description": "Authoritative STRUCTURAL schema for @fajekrina/sdui payloads. Derived from murti.schema.json v1 (Apache-2.0, see NOTICE); v1.1 additions are additive only, so every murti v1 payload stays valid. It enforces shape, closed vocabularies, and per-field bounds. Tree depth, total node count, action-chain depth, load-request count, and semantic resolution (a type/request/screen actually exists) are enforced by the client validator — see spec/README.md.",
+  "oneOf": [
+    { "$ref": "#/$defs/envelope" },
+    { "$ref": "#/$defs/payload" }
+  ],
+  "$defs": {
+    "envelope": {
+      "type": "object",
+      "description": "Production transport wrapper. The client verifies the signature (and optionally decrypts) BEFORE trusting the payload.",
+      "required": ["schemaVersion", "alg", "payload", "signature"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
+        "alg": {
+          "enum": ["ed25519", "es256"],
+          "description": "Signature algorithm. The app verifies with its embedded public key."
+        },
+        "keyId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "v1.1 — which signing key produced the signature (key rotation). Absent: the single configured key."
+        },
+        "enc": {
+          "enum": ["hybrid-x25519-aesgcm"],
+          "description": "Present ONLY when the payload is encrypted (hybrid/envelope encryption). Absent means signed-but-plaintext."
+        },
+        "payload": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "maxLength": 1048576,
+          "description": "Base64 of the UTF-8 payload JSON, or of the ciphertext when 'enc' is present. ~1 MiB cap."
+        },
+        "signature": {
+          "type": "string",
+          "contentEncoding": "base64",
+          "maxLength": 1024,
+          "description": "Base64 signature over the raw (pre-base64) 'payload' bytes."
+        }
+      }
+    },
+    "payload": {
+      "type": "object",
+      "description": "Plaintext screen tree — inside the envelope, or posted directly during development.",
+      "required": ["schemaVersion", "screen"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "$ref": "#/$defs/schemaVersion" },
+        "screen": { "$ref": "#/$defs/screen" }
+      }
+    },
+    "schemaVersion": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "MAJOR.MINOR. Consumers match on MAJOR; an unknown MINOR renders-what-it-can (forward-compatible)."
+    },
+    "screen": {
+      "type": "object",
+      "required": ["key", "root"],
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/identifier",
+          "description": "Stable screen key. Must resolve in the ScreenFactory (a semantic check the client performs)."
+        },
+        "root": { "$ref": "#/$defs/node" },
+        "load": {
+          "type": "array",
+          "maxItems": 16,
+          "description": "v1.1 — named requests run in PARALLEL when the screen opens; each result merges into the data context under its request name. The client bound maxLoadRequests applies.",
+          "items": { "$ref": "#/$defs/loadRequest" }
+        },
+        "variants": {
+          "type": "object",
+          "description": "v1.1 — optional per-width layouts (compact < 600px ≤ wide). 'root' stays the fallback.",
+          "additionalProperties": false,
+          "properties": {
+            "compact": { "$ref": "#/$defs/node" },
+            "wide": { "$ref": "#/$defs/node" }
+          }
+        }
+      }
+    },
+    "loadRequest": {
+      "type": "object",
+      "required": ["request"],
+      "additionalProperties": false,
+      "properties": {
+        "request": { "$ref": "#/$defs/identifier" },
+        "params": { "$ref": "#/$defs/props" }
+      }
+    },
+    "node": {
+      "type": "object",
+      "description": "A node. 'type' is an OPEN vocabulary (the component registry is extensible); the client's semantic layer confirms it resolves, otherwise the Null-Object fallback renders a placeholder.",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "$ref": "#/$defs/typeName" },
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Optional stable identity for rendering. Synthesized from the position if absent."
+        },
+        "props": { "$ref": "#/$defs/props" },
+        "children": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/node" }
+        },
+        "action": { "$ref": "#/$defs/action" }
+      }
+    },
+    "props": {
+      "type": "object",
+      "description": "A component's props bag. OPEN by design: unknown keys are ignored (forward-compatible). String values are length-bounded via #/$defs/value.",
+      "maxProperties": 64,
+      "additionalProperties": { "$ref": "#/$defs/value" }
+    },
+    "value": {
+      "description": "Any JSON scalar/array/object. Strings are length-bounded wherever they appear.",
+      "anyOf": [
+        { "type": "string", "maxLength": 4096 },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" },
+        { "type": "array", "maxItems": 512, "items": { "$ref": "#/$defs/value" } },
+        { "type": "object", "maxProperties": 64, "additionalProperties": { "$ref": "#/$defs/value" } }
+      ]
+    },
+    "action": {
+      "type": "object",
+      "description": "An action. 'type' is a CLOSED vocabulary. onSuccess/onError form a bounded LINEAR chain (max depth enforced by the client validator). Targets are named references (screen key / named request / named link / named native command) — never raw URLs.",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["navigate", "api", "dismiss", "refresh", "openURL", "toast", "native"] },
+        "screen": {
+          "$ref": "#/$defs/identifier",
+          "description": "navigate: a ScreenFactory key."
+        },
+        "presentation": {
+          "enum": ["push", "sheet", "fullScreen"],
+          "description": "v1.1 — navigate: how the host presents the next screen. Default push."
+        },
+        "request": {
+          "$ref": "#/$defs/identifier",
+          "description": "api: an allow-listed NamedRequest, mapped to method + path by the app bundle."
+        },
+        "link": {
+          "$ref": "#/$defs/identifier",
+          "description": "openURL: an allow-listed NAMED link. Not a raw URL — the identifier pattern structurally rejects 'https://...'."
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 4096,
+          "description": "v1.1 — toast: the text ({{token}}s allowed)."
+        },
+        "level": {
+          "enum": ["info", "success", "warning", "error"],
+          "description": "v1.1 — toast: severity. Default info."
+        },
+        "command": {
+          "$ref": "#/$defs/identifier",
+          "description": "v1.1 — native: a host command allow-listed by the app (e.g. biometricConfirm, share)."
+        },
+        "params": {
+          "$ref": "#/$defs/props",
+          "description": "Seeds the target's data context (navigate) or supplies request/command params (api/native). String values may be {{token}}s."
+        },
+        "onSuccess": { "$ref": "#/$defs/action" },
+        "onError": { "$ref": "#/$defs/action" }
+      },
+      "allOf": [
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "navigate" } } },
+          "then": { "required": ["screen"] }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "api" } } },
+          "then": { "required": ["request"] }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "openURL" } } },
+          "then": { "required": ["link"] }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "toast" } } },
+          "then": { "required": ["message"] }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "native" } } },
+          "then": { "required": ["command"] }
+        }
+      ]
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+      "maxLength": 128,
+      "description": "A named reference (screen key, request, link, command). Alphanumeric + underscore; the pattern rejects URLs, paths, and injection."
+    },
+    "typeName": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9_.]*$",
+      "maxLength": 128,
+      "description": "A component type. Dots allowed for third-party namespacing, e.g. 'ext.lottie'."
+    }
+  }
+}

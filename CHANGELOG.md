@@ -3,9 +3,56 @@
 Semua perubahan penting paket ini dicatat di sini. Format mengikuti Keep a Changelog;
 versi mengikuti Semantic Versioning (0.x: breaking change boleh di minor dengan catatan jelas).
 
+## [0.4.0] — 2026-11-11 · BREAKING
+
+Eksekusi **"Usulan Arsitektur SDUI: Selaras dengan Murti"**: satu spec, satu engine, tiga host.
+Format payload berganti total; data lama dikonversi (`fromUniversal`) atau dikeluarkan backend dalam format baru.
+
+### Ditambahkan
+- **Spec milik sendiri** di `spec/`: `sdui.schema.json` (Draft 2020-12, turunan murti v1 + v1.1 aditif),
+  fixture `valid/` (murti + `transfer_form`, `home_load`) dan `invalid/` (murti + 6 baru), `spec/README.md`.
+  Atribusi Apache-2.0 di `NOTICE`.
+- **Engine berstruktur MurtiEngine** (`createEngine`): `componentFactory`, `screenFactory`, `actionDispatcher`,
+  `validator`, `security`, `cache` di-inject; `load` / `screen(...)` / `prefetch` / `refreshManifest`; tidak pernah throw.
+- `ScreenController`: load → `screen.load` paralel → render RenderNode → `handle` / `setFieldValue`; varian per lebar.
+- **Model murti**: `SduiNode`, `SduiValue`, `ActionSpec`, `SduiPayload`/`SduiEnvelope` (base64 + `keyId`),
+  `SduiBounds` (+ `maxLoadRequests` 8), `SchemaValidator`, `DataContext` + `{{token}}`, `resolveValue`.
+- **Komponen** v1 (`text image vstack hstack zstack button card`) + v1.1 (`spacer divider grid scroll list form
+  textField textArea picker`); style tertutup + **token warna semantik** (`--sdui-color-*`); simbol `systemName`.
+- **Aksi** v1 (`navigate api dismiss refresh openURL`) + v1.1 (`toast`, `native`, `presentation` push/sheet/fullScreen);
+  params mendukung token (token tunggal mempertahankan tipe).
+- **Form**: scope `form.*`, validasi deklaratif, **pola bernama** (`numeric alphanumeric email phoneId amount pin6 nik`),
+  `secure: true` (tidak pernah di-log/di-cache, tidak bocor ke data layar).
+- **Cache** tiga tier (memori LRU → persisten → jaringan) per `screenKey@version`, verifikasi ulang tiap baca,
+  last-good saat offline (hanya kegagalan transport), **manifest bertanda tangan dengan `sequence` anti-rollback**.
+- **Port** (`NetworkClient`, `Navigator`, `HostPort`, `SignatureVerifier` + `keyedVerifier`, `CacheStore`, `CacheCipher`,
+  `ViewportPort`, `Logger`). `./browser`: `fetchNetworkClient` (endpoint bernama di bundle, header async),
+  `universalScreenProvider`, `webCryptoEd25519`, `indexedDbStore`, `aesGcmCipher`, `browserNavigator`, `windowViewport`.
+- **`./bridge`**: protokol pesan web↔host (Android `addWebMessageListener`, iOS `WKScriptMessageHandler`),
+  `nativeBridgePorts()` (navigasi, aksi `native`, token pola B, viewport, event analytics), `applyTheme`,
+  `verifyBundleManifest` + `scripts/sign-bundle.mjs`.
+- **Observabilitas** `onEvent`: `screen_loaded`, `validation_failed`, `unknown_component`, `action_dispatched`,
+  `load_request`, `form_invalid`, `rollback_rejected`, `bridge_error`.
+- **Renderer** generik `<SduiScreen>` (React, Vue) dan `mount()` (vanilla) + slot untuk komponen khusus toolkit.
+- **Builder**: `EditorDocument` (pohon spec, undo/redo, impor legacy), **DSL TS** (`screen/vstack/text/button/navigate…`),
+  `DSLExport` lossless, Studio DOM tunggal (React/Vue hanya wrapper) dengan panel JSON collapsible + sorot node.
+- `./compat` `fromUniversal()`: konversi halaman Universal lama + peringatan per node (alat builder, bukan jalur runtime).
+- Gerbang: tes spec (Ajv) + kemurnian core + paritas React = Vue = vanilla, `npm run size` (budget), `npm run conformance`
+  (Chromium ≡ WebKit via Playwright), CI `.github/workflows/ci.yml` dengan `npm ci`.
+
+### Dihapus (diganti)
+- Format `UniversalPageConfig` / 18 tipe PascalCase / CSS bebas / `<Fajrina>` / `FajrinaBuilder` / `createRuntime` /
+  `loadPage` / `toErrorPage`. Padanannya: spec v1.1 / komponen spec / style tertutup / `<SduiScreen>` / `SduiBuilder` /
+  `createEngine` / `engine.load` / `errorView`.
+
+### Perbaikan dari review 0.3.0
+- ReDoS: regex dari payload diganti pola bernama. URL mentah di aksi `api`: diganti nama request (endpoint di bundle).
+- Header statis: `getHeaders({ refresh })` async + satu kali refresh pada 401. Anti-rollback: `sequence` manifest.
+- `customEvent` yang memunculkan toast: dihapus (aksi tertutup). Lockfile diperbarui; `npm ci` diverifikasi.
+
 ## [0.3.0] — 2026-11-10
 
-Eksekusi `DESAIN-FRAMEWORK-SDUI.md` Fase 0–3 (core memegang perilaku + RenderNode + adapter ketiga + builder).
+Eksekusi `DESAIN-ARSITEKTUR-SDUI.md` Fase 0–3 (core memegang perilaku + RenderNode + adapter ketiga + builder).
 
 ### Ditambahkan
 - **Runtime headless** `createRuntime()` — `load` / `render` / `handle` / `dispatch` / `submit` / state UI + `subscribe`.

@@ -1,74 +1,119 @@
-// @vitest-environment jsdom
-/**
- * Gate: one payload → identical DOM in React, Vue and vanilla.
- * Compares tag, attributes, computed inline style, text and form values.
- */
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { cleanup, render } from '@testing-library/react'
-import { createApp, nextTick } from 'vue'
-import { Fajrina as ReactFajrina } from '../src/react/Fajrina'
-import { Fajrina as VueFajrina } from '../src/vue/Fajrina'
+// Gate: one payload → identical DOM from React, Vue and vanilla (the core makes
+// every decision; renderers are generic).
+import React from 'react'
+import { describe, expect, it } from 'vitest'
+import { render as renderReact, cleanup, act } from '@testing-library/react'
+import { createApp, h, nextTick } from 'vue'
+import { ScreenSource, createEngine } from '../src/core'
+import { SduiScreen as ReactScreen } from '../src/react'
+import { SduiScreen as VueScreen } from '../src/vue'
 import { mount } from '../src/vanilla'
-import { createRuntime } from '../src/core/runtime'
+import { fixture, flush } from './helpers'
 
-const DIR = join(__dirname, '..', 'fixtures', 'valid')
-const fixtures = readdirSync(DIR).filter((f) => f.endsWith('.json'))
+const FIXTURES = ['valid/dashboard.json', 'valid/login.json', 'valid/transfer_form.json', 'valid/home_load.json', 'valid/third_party_lottie.json']
+const SEED = { user: { name: 'Ada', segment: 'gold' }, getBalance: { amount: 1250 }, getPromos: { items: [{ title: 'Cashback' }] } }
 
-interface Shape { tag: string; attrs: Record<string, string>; style: string; text: string; value?: string; children: Shape[] }
-
-function shape(el: Element): Shape {
-  const attrs: Record<string, string> = {}
-  for (const a of Array.from(el.attributes)) {
-    if (a.name === 'style' || a.name === 'value') continue
-    attrs[a.name] = a.value
+/// Canonical form: tag, attributes sorted (style declarations sorted), text —
+/// attribute order is not semantic; anything else that differs is a real diff.
+function normalize(root: Element): string {
+  const walk = (node: Node): string => {
+    if (node.nodeType === 3) return (node.textContent ?? '').trim() ? `"${node.textContent}"` : ''
+    if (node.nodeType !== 1) return ''
+    const el = node as Element
+    const attrs = [...el.attributes]
+      .filter((a) => a.name !== 'data-sdui-key' && !(a.name === 'value' && a.value === ''))
+      .map((a) => (a.name === 'style' ? `style=${a.value.split(';').map((d) => d.trim()).filter(Boolean).sort().join(';')}` : `${a.name}=${a.value}`))
+      .sort()
+    return `<${el.tagName.toLowerCase()} ${attrs.join(' ')}>${[...el.childNodes].map(walk).join('')}</>`
   }
-  const html = el as HTMLElement
-  const text = Array.from(el.childNodes).filter((n) => n.nodeType === 3).map((n) => n.textContent).join('')
-  const value = 'value' in html && ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName) ? (html as HTMLInputElement).value : undefined
-  return { tag: el.tagName, attrs, style: html.style?.cssText ?? '', text, value, children: Array.from(el.children).map(shape) }
+  return [...root.childNodes].map(walk).join('')
 }
 
-async function renderVue(data: unknown): Promise<Shape> {
+async function reactDOM(source: Uint8Array): Promise<string> {
+  const engine = createEngine()
+  let container!: HTMLElement
+  await act(async () => {
+    container = renderReact(<ReactScreen engine={engine} source={ScreenSource.inline(source)} seed={SEED} />).container
+  })
+  await act(async () => { await flush() })
+  const html = normalize(container.querySelector('[data-sdui-screen]')!)
+  cleanup()
+  return html
+}
+
+async function vueDOM(source: Uint8Array): Promise<string> {
+  const engine = createEngine()
   const host = document.createElement('div')
   document.body.appendChild(host)
-  const app = createApp(VueFajrina, { data })
+  const app = createApp({ render: () => h(VueScreen, { engine, source: ScreenSource.inline(source), seed: SEED }) })
   app.mount(host)
-  await nextTick()
-  const s = shape(host.firstElementChild!)
+  await flush(); await nextTick(); await flush(); await nextTick()
+  const html = normalize(host.querySelector('[data-sdui-screen]')!)
   app.unmount()
   host.remove()
-  return s
+  return html
 }
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); document.body.innerHTML = '' })
+async function vanillaDOM(source: Uint8Array): Promise<string> {
+  const engine = createEngine()
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const view = mount(host, { engine, source: ScreenSource.inline(source), seed: SEED })
+  await flush(); await flush()
+  const html = normalize(host.querySelector('[data-sdui-screen]')!)
+  view.destroy()
+  host.remove()
+  return html
+}
 
-describe('adapter parity (React = Vue = vanilla)', () => {
-  for (const file of fixtures) {
-    it(file, async () => {
-      vi.spyOn(console, 'warn').mockImplementation(() => {})
-      const data = JSON.parse(readFileSync(join(DIR, file), 'utf8'))
+describe('renderer parity', () => {
+  it.each(FIXTURES)('%s renders identically in React, Vue and vanilla', async (name) => {
+    const source = fixture(name)
+    const [r, v, d] = [await reactDOM(source), await vueDOM(source), await vanillaDOM(source)]
+    expect(r.length).toBeGreaterThan(50)
+    expect(v).toBe(r)
+    expect(d).toBe(r)
+  })
+})
 
-      const { container } = render(<ReactFajrina data={data} />)
-      const react = shape(container.firstElementChild!)
-
-      const vue = await renderVue(data)
-
-      const host = document.createElement('div')
-      const view = mount(host, { data })
-      const vanilla = shape(host.firstElementChild!)
-      view.destroy()
-
-      expect(react.children.length).toBeGreaterThan(0)
-      expect(vue).toEqual(react)
-      expect(vanilla).toEqual(react)
+describe('interaction through each renderer', () => {
+  it('React: typing + click runs the form action', async () => {
+    const engine = createEngine()
+    const payload = { schemaVersion: '1.1', screen: { key: 's', root: { type: 'form', id: 'f', children: [
+      { type: 'textField', props: { name: 'who', required: true } },
+      { type: 'button', props: { title: 'Go' }, action: { type: 'toast', message: 'Hi {{form.who}}' } }
+    ] } } }
+    const { container } = renderReact(<ReactScreen engine={engine} source={{ payload }} />)
+    await act(async () => { await flush() })
+    const input = container.querySelector('input')!
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      setter.call(input, 'Ada')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
     })
-  }
+    await act(async () => { container.querySelector('button')!.click(); await flush() })
+    expect(container.textContent).toContain('Hi Ada')
+    cleanup()
+  })
 
-  it('core render output is deterministic for the same input', () => {
-    const data = JSON.parse(readFileSync(join(DIR, 'merchant_demo-home.json'), 'utf8'))
-    const rt = createRuntime({ ports: { logger: { warn: () => {}, error: () => {} } } })
-    expect(rt.render(data).nodes).toEqual(rt.render(JSON.parse(JSON.stringify(data))).nodes)
+  it('vanilla: typing keeps focus; click runs the action', async () => {
+    const engine = createEngine()
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const payload = { schemaVersion: '1.1', screen: { key: 's', root: { type: 'form', id: 'f', children: [
+      { type: 'textField', props: { name: 'who' } },
+      { type: 'button', props: { title: 'Go' }, action: { type: 'toast', message: 'Hi {{form.who}}' } }
+    ] } } }
+    const view = mount(host, { engine, source: { payload } })
+    await flush()
+    const input = host.querySelector('input')!
+    input.focus()
+    input.value = 'Ada'
+    input.dispatchEvent(new Event('input'))
+    expect((document.activeElement as HTMLElement).tagName).toBe('INPUT')
+    host.querySelector('button')!.click()
+    await flush()
+    expect(host.textContent).toContain('Hi Ada')
+    view.destroy()
   })
 })

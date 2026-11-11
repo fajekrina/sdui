@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0",
+  "screen": {
+    "key": "paymentSuccess",
+    "root": {
+      "type": "vstack",
+      "props": { "spacing": 12, "alignment": "center" },
+      "children": [
+        { "type": "lottie", "props": { "name": "success_check", "loop": false } },
+        { "type": "text", "props": { "value": "Payment complete" } }
+      ]
+    }
+  }
+}

@@ -1,49 +1,32 @@
-/**
- * Gate: the core must stay framework-free and DOM-free. One stray import here
- * breaks the agnostic promise, so this runs on every `npm test`.
- */
+// Gate: the engine (src/core, src/spec, src/ports, src/compat) is headless — no
+// framework imports and no browser globals. Effects only through ports.
+import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { ROOT } from './helpers'
 
-const CORE = join(__dirname, '..', 'src', 'core')
+const PURE_DIRS = ['src/core', 'src/spec', 'src/ports', 'src/compat']
+const FORBIDDEN_IMPORTS = /from\s+['"](react|react-dom|vue)(\/[^'"]*)?['"]/
+const FORBIDDEN_GLOBALS = /(?<![.\w$])(window|document|localStorage|sessionStorage|indexedDB|navigator|history|fetch|XMLHttpRequest)\s*[.(]|(?<![.\w$])crypto\.(subtle|getRandomValues)|globalThis\.(window|document|crypto|fetch|indexedDB|localStorage)/
 
-function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
-}
-
-const FORBIDDEN: Array<[string, RegExp]> = [
-  ['react import', /from\s+['"]react(-dom)?(\/[^'"]*)?['"]/],
-  ['vue import', /from\s+['"]vue['"]/],
-  ['browser adapter import', /from\s+['"]\.\.\/(browser|react|vue|vanilla|builder)/],
-  ['window', /(?<![.\w$])window\s*[.[(]/],
-  ['document', /(?<![.\w$])document\s*[.[(]/],
-  ['localStorage', /(?<![.\w$])(local|session)Storage\b/],
-  ['navigator', /(?<![.\w$])navigator\s*\./],
-  ['history', /(?<![.\w$])history\s*\./],
-  ['bare fetch', /(?<![.\w$])fetch\s*\(/],
-  ['bare crypto', /(?<![.\w$])crypto\s*\./]
-]
-
-/**
- * Explicit, temporary exceptions. Each one is a deprecated 0.2 API that keeps
- * its old behavior until 1.0 (see CHANGELOG "Deprecated"); new code must use ports.
- */
-const ALLOWED: Record<string, string[]> = {
-  'cache.ts': ['localStorage'] // loadPageWithCache default store (globalThis.localStorage) — removed in 1.0
-}
-
-describe('core purity gate', () => {
-  const files = readdirSync(CORE).filter((f) => f.endsWith('.ts'))
-  it('finds the core sources', () => {
-    expect(files.length).toBeGreaterThan(10)
+function files(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name)
+    return statSync(path).isDirectory() ? files(path) : path.endsWith('.ts') ? [path] : []
   })
-  for (const file of files) {
-    it(`${file} has no framework/DOM access`, () => {
-      const src = stripComments(readFileSync(join(CORE, file), 'utf8'))
-      const hits = FORBIDDEN.filter(([, re]) => re.test(src)).map(([name]) => name)
-        .filter((name) => !(ALLOWED[file] ?? []).includes(name))
-      expect(hits).toEqual([])
-    })
-  }
+}
+
+/// Code only: strip block and line comments (doc comments mention window, fetch…).
+const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n')
+
+describe('core purity', () => {
+  const all = PURE_DIRS.flatMap((d) => files(join(ROOT, d)))
+
+  it('finds the engine sources', () => expect(all.length).toBeGreaterThan(20))
+
+  it.each(all.map((f) => relative(ROOT, f)))('%s has no framework import and no browser global', (file) => {
+    const src = code(readFileSync(join(ROOT, file), 'utf8'))
+    expect(src).not.toMatch(FORBIDDEN_IMPORTS)
+    expect(src).not.toMatch(FORBIDDEN_GLOBALS)
+  })
 })

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "1",
+  "screen": {
+    "key": "s",
+    "root": { "type": "text", "props": { "value": "hi" } }
+  }
+}

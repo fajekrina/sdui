@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "1.0",
+  "screen": {
+    "key": "errorState",
+    "root": {
+      "type": "vstack",
+      "props": { "spacing": 12, "alignment": "center" },
+      "children": [
+        { "type": "image", "props": { "name": "warning" } },
+        { "type": "text", "props": { "value": "Something went wrong", "style": "title" } },
+        { "type": "text", "props": { "value": "Please try again." } },
+        { "type": "button", "props": { "title": "Retry" }, "action": { "type": "refresh" } }
+      ]
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0",
+  "screen": {
+    "key": "login",
+    "root": {
+      "type": "vstack",
+      "props": { "spacing": 16, "alignment": "center" },
+      "children": [
+        { "type": "image", "props": { "name": "logo", "contentMode": "fit" } },
+        { "type": "text", "props": { "value": "Welcome back", "style": "title" } },
+        {
+          "type": "button",
+          "props": { "title": "Sign in", "a11yId": "signin_button", "a11yTraits": ["button"] },
+          "action": {
+            "type": "api",
+            "request": "submitLogin",
+            "onSuccess": { "type": "navigate", "screen": "dashboard" },
+            "onError": { "type": "refresh" }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,1 @@
+{ "schemaVersion": "1.1", "screen": { "key": "s", "load": [ { "request": "https://evil.example.com/data" } ], "root": { "type": "text" } } }

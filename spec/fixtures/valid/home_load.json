@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "1.1",
+  "screen": {
+    "key": "home",
+    "load": [
+      { "request": "getBalance" },
+      { "request": "getPromos", "params": { "segment": "{{user.segment}}" } }
+    ],
+    "root": {
+      "type": "scroll",
+      "children": [
+        {
+          "type": "vstack",
+          "props": { "spacing": 12, "alignment": "leading", "padding": 16 },
+          "children": [
+            { "type": "text", "props": { "value": "Hello, {{user.name}}", "style": "title" } },
+            {
+              "type": "card",
+              "props": { "background": "primary", "foreground": "onPrimary", "cornerRadius": 16 },
+              "children": [
+                { "type": "text", "props": { "value": "Balance", "style": "caption" } },
+                { "type": "text", "props": { "value": "Rp{{getBalance.amount}}", "size": 28, "weight": "bold" } }
+              ]
+            },
+            { "type": "divider" },
+            { "type": "text", "props": { "value": "Promos", "style": "headline" } },
+            {
+              "type": "list",
+              "props": { "items": "getPromos.items", "as": "promo", "spacing": 8 },
+              "children": [
+                { "type": "card", "children": [ { "type": "text", "props": { "value": "{{promo.title}}" } } ] }
+              ]
+            },
+            { "type": "spacer", "props": { "height": 24 } },
+            {
+              "type": "grid",
+              "props": { "columns": 2, "spacing": 8 },
+              "children": [
+                { "type": "button", "props": { "title": "Transfer" }, "action": { "type": "navigate", "screen": "transferForm", "presentation": "sheet" } },
+                { "type": "button", "props": { "title": "Help" }, "action": { "type": "openURL", "link": "helpCenter" } }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "variants": {
+      "wide": {
+        "type": "hstack",
+        "props": { "spacing": 24, "alignment": "top", "padding": 24 },
+        "children": [
+          { "type": "text", "props": { "value": "Hello, {{user.name}}", "style": "title" } },
+          { "type": "text", "props": { "value": "Rp{{getBalance.amount}}", "size": 28, "weight": "bold", "color": "primary" } }
+        ]
+      }
+    }
+  }
+}

@@ -22,7 +22,9 @@ export default defineConfig({
         'react/index': resolve(__dirname, 'src/react/index.ts'),
         'vue/index': resolve(__dirname, 'src/vue/index.ts'),
         'builder/index': resolve(__dirname, 'src/builder/index.ts'),
-        'builder/react': resolve(__dirname, 'src/builder/react.ts'),
+        'builder/react': resolve(__dirname, 'src/builder/react.tsx'),
+        'bridge/index': resolve(__dirname, 'src/bridge/index.ts'),
+        'compat/index': resolve(__dirname, 'src/compat/index.ts'),
         'builder/vue': resolve(__dirname, 'src/builder/vue.ts')
       },
       formats: ['es', 'cjs'],
@@ -34,6 +36,7 @@ export default defineConfig({
     rollupOptions: {
       external: ['react', 'react-dom', 'vue', 'react/jsx-runtime'],
       output: {
+        exports: 'named',
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM',

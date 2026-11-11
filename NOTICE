@@ -1,0 +1,24 @@
+@fajekrina/sdui
+Copyright 2026 fajekrina
+
+This product includes material derived from Murti, a SwiftUI server-driven UI
+framework:
+
+  Murti — https://github.com/iQbalADR/murti
+  Copyright 2026 iQbalADR
+  Licensed under the Apache License, Version 2.0
+  (http://www.apache.org/licenses/LICENSE-2.0)
+
+Derived material:
+
+  - spec/sdui.schema.json is based on docs/murti.schema.json (v1); the v1.1
+    additions (screen.load, variants, toast/native actions, presentation,
+    envelope keyId) are ours.
+  - spec/fixtures/valid and spec/fixtures/invalid include Murti's fixtures
+    unchanged.
+  - The engine structure and parts of src/core (value, node, action spec,
+    payload/envelope, bounds, schema validator, token resolver, data context,
+    action commands, cache coordinator, manifest) are TypeScript ports of
+    Murti's MurtiCore, adapted for this project.
+
+The rest of this package is licensed under the MIT License (see LICENSE).

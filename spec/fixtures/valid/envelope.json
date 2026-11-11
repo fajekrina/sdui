@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "1.0",
+  "alg": "ed25519",
+  "payload": "eyJzY2hlbWFWZXJzaW9uIjoiMS4wIiwic2NyZWVuIjp7ImtleSI6InMiLCJyb290Ijp7InR5cGUiOiJ0ZXh0In19fQ==",
+  "signature": "c2lnbmF0dXJlLXBsYWNlaG9sZGVyLWJ5dGVz"
+}

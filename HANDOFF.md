@@ -1,192 +1,153 @@
 # HANDOFF — @fajekrina/sdui (library)
 
-> Tanggal: 2026-11-10 · Versi: **0.3.0** (belum di-commit, belum di-publish)
-> Desain: `DESAIN-FRAMEWORK-SDUI.md` (§13 = status implementasi) · Riwayat: `CHANGELOG.md`
-> Pasangan: `universal-service/HANDOFF.md`, `react-tailwind/HANDOFF.md`, `vue-bootstrap/HANDOFF.md`
+> Tanggal: 2026-11-11 · Versi: **0.4.0** (BREAKING; belum di-commit, belum di-publish)
+> Acuan: **"Usulan Arsitektur SDUI: Selaras dengan Murti"** (`../Usulan Arsitektur SDUI Selaras dengan Murti.md`)
+> Spec: `spec/` · Host: `HOST-BRIDGE.md` · Riwayat: `CHANGELOG.md` · Atribusi: `NOTICE`
+> Belum disesuaikan (sengaja, menyusul): `universal-service`, `react-tailwind`, `vue-bootstrap` — lihat §7.
 
 ## 1. Apa ini
-Renderer + runtime SDUI tanpa framework. **Core** memutuskan semuanya (validasi, policy, style, aksi, form,
-toast/modal, loading). **Adapter** React/Vue/vanilla hanya merender `RenderNode` dari core, sehingga DOM-nya
-identik (dibuktikan tes paritas).
+**Library**, bukan framework: aplikasi (web, atau host Android/iOS lewat WebView) yang memanggil sdui dan
+tetap memegang router, state, dan auth. Yang diadopsi dari framework hanya arsitekturnya: **satu spec, satu
+engine headless, renderer tipis, host mengisi port.** Kontrak payload = spec milik kita di `spec/`, turunan
+murti v1 + tambahan v1.1 yang aditif. murti hanya acuan format dan desain, bukan dependensi.
 
 ## 2. Desain sistem
 
-### 2.1 Posisi dalam sistem
-```mermaid
-flowchart LR
-  B[Builder<br/>FajrinaBuilder] -- POST monolit --> S[(universal-service<br/>H2: 3 artefak + release)]
-  S -- GET client/page + ETag --> L
-  subgraph LIB["@fajekrina/sdui"]
-    L[loader] --> RT[runtime] --> VM[view-model] --> AD[adapter React / Vue / vanilla]
-  end
-  AD --> DOM[DOM]
-  APP[Aplikasi konsumen] -- ports: router, network, storage --> RT
-```
-
-### 2.2 Lapisan dan aturan ketergantungan
+### 2.1 Empat lapis
 ```mermaid
 flowchart TB
-  subgraph ADAPTER[Adapter tipis — hanya view binding]
-    R[react/Fajrina + SduiNode]
-    V[vue/Fajrina + renderSduiNode]
-    J[vanilla/mount]
-    BU[builder/FajrinaBuilder React/Vue]
+  subgraph SPEC["spec/ — kontrak"]
+    S1["sdui.schema.json (Draft 2020-12)"]
+    S2["fixtures valid / invalid"]
   end
-  subgraph CORE[core — tanpa DOM, tanpa framework]
-    RT[runtime] --> VM[view-model]
-    RT --> AC[actions / dispatcher]
-    RT --> UI[ui-store]
-    RT --> LD[loader]
-    VM --> REG[registry 18 tipe]
-    VM --> ST[style + theme]
-    RT --> VAL[validate]
-    LD --> SG[sign]
+  subgraph ENGINE["engine headless (src/core) — tanpa DOM/framework"]
+    E1["createEngine: componentFactory · screenFactory · actionDispatcher · validator · security · cache"]
+    E2["ScreenController: load → screen.load paralel → render RenderNode → handle"]
   end
-  subgraph PORTS[ports]
-    P1[storage] & P2[network] & P3[crypto] & P4[navigation] & P5[events] & P6[logger]
+  subgraph R["renderer tipis"]
+    R1["react <SduiScreen>"]
+    R2["vue <SduiScreen>"]
+    R3["vanilla mount()"]
   end
-  BR[browser/browserPorts] -. mengisi .-> PORTS
-  ADAPTER --> CORE
-  CORE -. hanya memanggil .-> PORTS
+  subgraph HOST["host (mengisi port)"]
+    H1["./browser: fetch · WebCrypto · IndexedDB · window"]
+    H2["./bridge: Android addWebMessageListener / iOS WKScriptMessageHandler"]
+  end
+  BE["Backend (universal-service) — mengeluarkan format spec"] --> E1
+  SPEC -. CI + backend validasi .-> BE
+  SPEC -. client validator .-> E1
+  E1 --> E2 --> R
+  E1 -. port .-> HOST
 ```
-- `core` dilarang mengimpor react/vue atau memakai `window/document/localStorage/fetch/crypto/navigator/history` (tes `core-guard`).
-- Adapter dilarang bercabang per tipe komponen atau per `behavior`; semua keputusan ada di `view-model` dan `actions`.
-- `browser` satu-satunya modul yang menyentuh API browser.
 
-### 2.3 Pipeline render
+### 2.2 Pipeline load (fail-closed)
 ```mermaid
 flowchart LR
-  D[data / hasil load] --> N[normalizeToLayout]
-  N --> P[mergePolicy<br/>app = batas atas]
-  P --> VA[validateData<br/>warn / strict]
-  VA -->|strict + error| E[toErrorPage]
-  VA --> T[buildTree + theme tokens]
-  T --> M[renderComponent → RenderNode]
-  E --> M
-  M --> O[+ overlays toast/modal dari ui-store]
-  O --> A[adapter render generik]
-```
-Aturan menang style: **inline > token (tema) > preset** (`buildLayoutStyle`). `position: fixed` hanya untuk Modal/Toast.
-Link `javascript:` / host di luar allow-list → `href="#"`.
-
-### 2.4 Alur aksi
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant A as Adapter
-  participant R as runtime
-  participant App as onAction (aplikasi)
-  participant P as Ports / ui-store
-  U->>A: klik / submit
-  A->>R: handle("dispatch:id" | "submit:formId" | "closeModal")
-  R->>R: resolveAction (alias legacy → warning sekali)
-  R->>R: validasi form (required/min/max/email/pattern)
-  alt error form
-    R->>P: setErrors → error tampil di bawah field
-    R->>App: onAction(validationError)
-  else policy menolak
-    R->>App: onAction(blocked)
-  else lolos
-    R->>App: onAction(event)
-    alt event.preventDefault()
-      R-->>A: selesai
-    else
-      R->>P: navigation / events / network.request (api → onSuccess/onError ≤ 4) / toast / modal
-    end
-  end
+  A[ScreenSource key/named/inline] --> B{cache?}
+  B -- memori --> V
+  B -- persisten --> C[verify ulang + validasi] --> V
+  B -- miss --> D[ScreenFactory → backend]
+  D -- transport gagal --> L[last-good, diverifikasi ulang]
+  D --> C2[verify Ed25519 per keyId] --> E[decode] --> F[SchemaValidator + bounds] --> V[LoadState.loaded]
+  C2 -- gagal --> X[errorView, judul per jenis]
+  V --> G[screen.load paralel → DataContext] --> H[render RenderNode]
 ```
 
-### 2.5 Alur load
-```mermaid
-flowchart TD
-  S[load mid,key] --> C{cache ada?}
-  C -->|ya| G1[GET + If-None-Match]
-  C -->|tidak| G2[GET]
-  G1 -->|304| H[pakai cache]
-  G1 -->|200| V
-  G2 -->|200| V[verify envelope per keyId<br/>bila signed / required]
-  G1 & G2 -->|gagal jaringan| H2{cache?}
-  H2 -->|ya| H
-  H2 -->|tidak| ER[halaman error, source=error]
-  H --> V2[verify + validate ulang] --> OUT
-  V --> Q[validate] --> W[simpan last-good bila bersih] --> OUT[LoadResult: page, source, etag, errors]
-```
+### 2.3 Alur aksi
+Klik → `RenderNode.on.click` → `screen.handle(key)` → (di dalam `form`: validasi field dengan pola bernama; gagal =
+error per field + event `form_invalid`) → `ActionDispatcher` → Command tertutup:
+`navigate` (Navigator, `presentation`), `api` (NetworkClient + NamedRequest, hasil di-merge ke data), `dismiss`,
+`refresh` (muat ulang layar), `openURL` (nama link), `toast` (UI store), `native` (HostPort). Rantai `onSuccess`/`onError`
+≤ 4. Params `{{token}}` di-resolve saat dispatch.
 
-Pemetaan error load (`errors[0]` + `page.error.kind` → judul halaman error):
+### 2.4 Kontrak data
+- Payload `{ schemaVersion, screen: { key, load?, root, variants? } }`; envelope `{ schemaVersion, alg, keyId?, payload(b64), signature(b64) }`.
+- Node `{ type, id?, props?, children?, action? }`; 16 komponen bawaan; style tertutup + token warna; `systemName`.
+- RenderNode `{ key, type?, element, attrs, style, text?, field?, on?, slot?, children }` — satu-satunya input renderer.
+- Event observabilitas `SduiEvent` (tanpa PII).
 
-| Kondisi | `code` | `status` / `serverCode` | Judul |
-|---|---|---|---|
-| fetch throw / tanpa NetworkPort | `network` | – | Offline |
-| 404, 410 | `http` | ✓ / `SDUI-002` | Not Found |
-| 401, 403 | `http` | ✓ | Access Denied |
-| 4xx lain (400, 409, …) | `http` | ✓ | Request Rejected |
-| 5xx tanpa cache (dengan cache → last-good) | `http` | ✓ | Service Unavailable |
-| signature / key / body bukan objek | `decode` | – | Invalid Page |
-| strict + validasi gagal (runtime) | kode validasi pertama | – | Blocked |
+## 3. Status (0.4.0)
 
-### 2.6 Kontrak data
-- **Input**: payload A1 flat `{…, policy, layout:{type,title?,subtitle?,components[{id,component|type,parentId,order,props,style}]}}` atau bentuk bersarang `children`.
-- **RenderNode**: `{key, type?, element, attrs, style, text?, field?, on?, preventDefault?, stopPropagation?, children}`.
-- **RenderResult**: `{nodes, overlays, errors, failed}`.
-- **FajrinaActionEvent**: `{behavior, action, target, href, eventName, data, params, sourceComponent, preventDefault(), defaultPrevented}`.
-- Behavior tertutup: `navigate back submit externalLink openModal closeModal toast customEvent api`.
+| Item usulan | Status | Di mana |
+| --- | --- | --- |
+| Spec milik sendiri + fixture + lint (Ajv) | ✅ | `spec/`, `tests/spec.test.ts` |
+| Engine berstruktur MurtiEngine | ✅ | `src/core/engine.ts`, `screen.ts` |
+| Renderer generik React/Vue/vanilla + paritas | ✅ | `src/react`, `src/vue`, `src/vanilla`, `tests/parity.test.tsx` |
+| Null Object (marker hanya debug) + event `unknown_component` | ✅ | `render-context.ts` |
+| Aksi tertutup + target bernama (+ toast, native, presentation) | ✅ | `actions/` |
+| Style terbatas + token tema semantik | ✅ | `style.ts`, `bridge.applyTheme` |
+| `DataContext` + `{{token}}` | ✅ | `data-context.ts`, `token.ts` |
+| `screen.load` paralel + skeleton + `maxLoadRequests` | ✅ | `screen.ts` |
+| Form + pola bernama + `secure` | ✅ | `components/builtins.ts`, `patterns.ts` |
+| Komponen layout v1.1 (spacer, divider, grid, list, scroll) | ✅ | `components/builtins.ts` |
+| Varian compact/wide | ✅ | `screen.ts` (`ViewportPort`) |
+| Envelope Ed25519 + `keyId` + verifikasi tiap load (termasuk cache) | ✅ | `engine.ts`, `browser.webCryptoEd25519`, `keyedVerifier` |
+| Cache memori/IndexedDB + AES-GCM + manifest `sequence` anti-rollback | ✅ | `cache/`, `browser` |
+| Native bridge + token pola B | ✅ (sisi web) | `src/bridge`, `HOST-BRIDGE.md` |
+| Manifest bundle bertanda tangan | ✅ (tooling + verifikasi referensi) | `scripts/sign-bundle.mjs`, `bridge/bundle-manifest.ts` |
+| Observabilitas `onEvent` | ✅ | `events.ts` |
+| DSL TS + DSLExport lossless | ✅ | `builder/dsl.ts`, `dsl-export.ts` |
+| Builder = Studio (pratinjau == client, ekspor tervalidasi) | ✅ | `builder/studio.ts` (+ wrapper React/Vue) |
+| `fromUniversal` (alat builder) | ✅ | `src/compat` |
+| Gerbang CI: `npm ci`, typecheck, tes, kemurnian core, budget, conformance | ✅ | `.github/workflows/ci.yml` |
+| Conformance Chromium ≡ WebKit | ⚠ harness ✅, WebKit hanya di CI | Windows lokal tak punya DLL WebKit; `CONFORMANCE_PAIR=chromium,chromium` untuk smoke lokal |
+| Aplikasi host Android/iOS | ⏳ | di luar repo ini; kontrak di `HOST-BRIDGE.md` |
+| Versi minimum WebView/iOS dari data distribusi | ⏳ | butir terbuka usulan |
 
-## 3. Status
-| | |
-|---|---|
-| Tes | `npm test` → **12 file, 115 tes lulus** |
-| Typecheck | `npm run typecheck` bersih |
-| Build | `npm run build` bersih (peringatan lama "named and default exports" pada entry adapter/builder) |
-| Fase desain | 0–3 selesai; Fase 4 (rilis 1.0) belum |
+Angka saat ini: **164 tes / 11 file** lulus; typecheck src + tests bersih; build bersih;
+ukuran (esbuild, minify, gzip): core 16,5 KB, react 1,3, vue 1,2, vanilla 1,3, browser 2,4, bridge 2,7.
+
+### Deviasi yang disengaja
+- **Validator lapis 2 di client ditulis tangan** (port `MurtiSchemaValidator`), bukan Ajv di runtime: Ajv ±35 KB
+  akan melanggar budget bundle. Ajv dipakai di CI (`tests/spec.test.ts`) dan oleh backend; tes memastikan keduanya sepakat.
+  Key struktural asing diabaikan client (kebijakan minor forward-compat) — empat fixture invalid ditolak hanya di lapis skema.
+- **Tipe TS ditulis tangan**, bukan dibangkitkan `json-schema-to-typescript`; kelas model (`SduiNode`, `ActionSpec`, …) punya
+  decode/encode sendiri yang diuji terhadap fixture.
+- **`zstack` absolut** memakai persentase (proporsional), bukan `scaleEffect` — teks tidak ikut diskalakan.
+- **Cache key** `sdui:<screen>@<version>` tanpa SHA-256 (core tak boleh menyentuh `crypto`; IndexedDB tak butuh nama file aman).
 
 ## 4. Peta kode
 ```
-src/core/            ← tidak boleh menyentuh DOM/framework (tests/core-guard.test.ts)
-  runtime.ts         createRuntime: load / render / handle / dispatch / submit / subscribe
-  view-model.ts      komponen → RenderNode (satu-satunya tempat keputusan render)
-  registry.ts        18 tipe: kategori, acceptsChildren, allowedBehaviors, defaultProps
-  actions.ts         resolveAction (alias legacy), checkUrl, mergePolicy, validateField
-  ui-store.ts        toast / modal / nilai + error form
-  loader.ts          ETag/304, last-good cache, verifikasi envelope per keyId
-  ports.ts           kontrak port + default memori/no-op
-  validate.ts style.ts theme.ts tree.ts sign.ts cache.ts props.ts types.ts   (dari 0.2, diperluas)
-src/browser/         browserPorts(): satu-satunya modul yang memakai window/document/localStorage/fetch
-src/react/           Fajrina.tsx (+useSduiRuntime), SduiNode.tsx (renderer generik)
-src/vue/             Fajrina.ts (render function), SduiNode.ts (renderSduiNode, SduiNodeView)
-src/vanilla/         mount(el, options)
-src/builder/         builder.ts (state headless + previewNode/builderPalette/defaultPropsFor), FajrinaBuilder.tsx/.vue, BuilderNode.vue
-fixtures/valid/      showcase-18 + 3 halaman merchant_demo (salinan dari universal-service) — dipakai tes paritas
+spec/                 sdui.schema.json, fixtures/, README.md (kontrak)
+src/spec/             SPEC_VERSION, daftar komponen
+src/core/             engine (murni) — value, node, payload, bounds, validator, token, data-context, patterns,
+                      style, components/, component-factory, render-context, render-node, screen-factory,
+                      actions/ (spec, dispatcher), security, cache/, engine, screen, events, ui-store
+src/ports/            kontrak port + default aman
+src/browser/          port browser (fetch, WebCrypto, IndexedDB, AES-GCM, navigator, viewport)
+src/bridge/           protokol host, nativeBridgePorts, applyTheme, verifyBundleManifest
+src/react|vue|vanilla renderer generik
+src/builder/          EditorDocument, tree ops, DSL, DSLExport, preview, Studio (DOM) + wrapper React/Vue
+src/compat/           fromUniversal
+conformance/          harness Playwright Chromium ≡ WebKit
+scripts/              size.mjs (budget), sign-bundle.mjs
+tests/                vitest (fixtures/legacy = halaman Universal lama untuk compat)
 ```
 
 ## 5. Kontrak penting
-- `<Fajrina data|source ports policy theme mode verify runtime onAction>` (React) / sama di Vue dengan `@action`, `@validationError`, `@load`.
-- **`ports.navigation.navigate` default no-op** — konsumen wajib menyambungkan router (kedua demo sudah).
-- `onAction` dipanggil dulu; `event.preventDefault()` membatalkan efek default. `behavior: 'blocked'` = aksi ditolak policy.
-- `submit` tidak punya efek default: aplikasi yang mengirim ke backend.
-- Policy aplikasi (prop) = batas atas; policy dari payload hanya mempersempit (`mergePolicy`).
-- Kunci cache tetap `fajrina-page:{mid}:{key}`; entri 0.2 (tanpa ETag) tetap terbaca.
-- `browserNetwork` default base `/api/universal/v1` (universal-service berversi); loader membaca pesan error dari `errorMessage` (fallback `error`), `errorCode` → `SduiError.serverCode`, status → `SduiError.status`; kode `http` vs `network` (lihat §2.5).
+- Payload **tidak pernah** berisi URL mentah atau regex: request/link/command = nama; pola field = nama.
+- Endpoint = konfigurasi bundle (`fetchNetworkClient({ endpoints })`); nama tak dikenal gagal tertutup.
+- Token API pola B (`getHeaders({ refresh })`), hanya di memori; 401 → satu kali refresh.
+- `secure` field tidak masuk data layar, log, maupun cache. Respons `api` tidak pernah di-cache.
+- `load()` tidak pernah throw; kegagalan = `errorView` (judul per jenis error, detail hanya `debug`).
+- Last-good offline hanya untuk kegagalan transport (offline/5xx); payload baru yang gagal verifikasi tidak ditutupi.
 
-## 6. Cara kerja sehari-hari
+## 6. Cara kerja
 ```bash
-npm test                 # semua gate
-npm run build            # wajib sebelum demo dipakai: konsumen membaca dist/ lewat workspace junction
-npx vitest run tests/parity.test.tsx   # setelah mengubah view-model/adapter
+npm ci                     # repo ini berdiri sendiri; lockfile sudah diperbarui & npm ci terverifikasi
+npm run typecheck
+npm test                   # 164 tes (spec gate, kemurnian core, paritas 3 renderer, engine, keamanan, bridge, builder)
+npm run build
+npm run size
+npm run conformance        # perlu `npx playwright install chromium webkit`; WebKit hanya jalan di Linux/macOS
 ```
-Menambah tipe komponen: `core/registry.ts` (descriptor) + `core/view-model.ts` (case) + `core/types.ts`
-+ seed backend `V2__sdui_seed_registry.sql` (atau migrasi baru). Tidak perlu menyentuh adapter.
 
-## 7. Diketahui / belum
-- **Budget bundle**: chunk core ~12,9 KB gzip (target desain 10 KB). Belum ada `size-limit`.
-- Belum ada `publint`, `@arethetypeswrong/cli`, coverage threshold, tes SSR `renderToString`.
-- Gate kemurnian core berupa tes regex (bukan ESLint). Pengecualian: `cache.ts` (`loadPageWithCache`, deprecated).
-- `Image.src` hanya dicek skema (data contoh memakai picsum.photos di luar allow-list).
-- Builder React/Vue masih file besar dengan style inline; logika render komponen sudah dari core, tapi panel properti belum di-refactor.
-- Kontrak registry core vs tabel `sdui_component_type` dijaga manual (belum ada tes kontrak lintas repo).
-- Tidak diuji di browser sungguhan oleh saya: verifikasi lewat jsdom (paritas, adapter) + render Node terhadap backend live.
-
-## 8. Langkah berikut (urut)
-1. Commit + tag 0.3.0; jalankan `npm run build:all` dari root.
-2. Pasang `size-limit` + kecilkan core (pisah `loader`/`sign` dari chunk runtime bila tidak dipakai).
-3. CI: `publint`, `attw`, coverage ≥ 80% core, SSR test.
-4. Fase 4: README per entry, TSDoc, `SECURITY.md`, hapus API deprecated → 1.0.
+## 7. Belum / berikutnya
+1. **universal-service**: keluarkan format spec langsung (konversi halaman lama di backend, padanan `fromUniversal`
+   di Java), validasi simpan/publish dengan `spec/sdui.schema.json`, envelope `keyId`, endpoint manifest bertanda tangan
+   dengan `sequence` monoton. Kunci page `seat-selection` → identifier `seat_selection`.
+2. **react-tailwind / vue-bootstrap**: ganti `<Fajrina>`/`loadPage` dengan `createEngine` + `<SduiScreen>`, builder
+   dengan `<SduiBuilder>`; endpoint `api`/link di konfigurasi bundle.
+3. Aplikasi host Android/iOS mengikuti `HOST-BRIDGE.md`; versi minimum WebView/iOS dari data distribusi.
+4. Kepemilikan & rotasi kunci Ed25519 (payload + bundle) — ditunda ke Fase 3 sesuai usulan.
+5. Kode 0.3.0 yang diganti tersimpan di commit `214e84c` (dan cadangan lokal di scratchpad sesi).

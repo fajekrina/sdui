@@ -1,36 +1,32 @@
-/**
- * Fajrina SDUI — UI store: toast, modal and form state, framework-free.
- * Immutable snapshots + subscribe, so React (useSyncExternalStore), Vue
- * (shallowRef) and vanilla can all bind to the same state.
- */
+/// UI store: toasts and form state, framework-free. Immutable snapshots +
+/// subscribe, so React (useSyncExternalStore), Vue (shallowRef) and vanilla all
+/// bind to the same state.
 
-export interface ToastState { id: string; message: string }
-export interface ModalState { id: string; title?: string; message?: string }
+import type { ToastLevel } from './actions/spec'
+
+export interface ToastState { id: string; message: string; level: ToastLevel }
 export interface FormState { values: Record<string, string>; errors: Record<string, string> }
 
 export interface UiState {
   toasts: ToastState[]
-  modal: ModalState | null
   forms: Record<string, FormState>
 }
 
-/** 'field' = a single input changed (vanilla skips re-render: the DOM already has the value) */
-export type UiChange = 'field' | 'errors' | 'toast' | 'modal' | 'reset'
+/// 'field' = a single input changed (vanilla skips re-render: the DOM already has the value)
+export type UiChange = 'field' | 'errors' | 'toast' | 'reset'
 
 export interface UiStore {
   getState(): UiState
   subscribe(listener: (change: UiChange) => void): () => void
-  showToast(message: string, durationMs?: number): void
+  showToast(message: string, level?: ToastLevel, durationMs?: number): void
   dismissToast(id: string): void
-  openModal(modal: ModalState): void
-  closeModal(): void
   setField(formId: string, name: string, value: string): void
   setErrors(formId: string, errors: Record<string, string>): void
   reset(): void
   destroy(): void
 }
 
-const EMPTY: UiState = { toasts: [], modal: null, forms: {} }
+const EMPTY: UiState = { toasts: [], forms: {} }
 
 export function createUiStore(): UiStore {
   let state: UiState = EMPTY
@@ -50,9 +46,9 @@ export function createUiStore(): UiStore {
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
-    showToast(message, durationMs = 2500) {
+    showToast(message, level = 'info', durationMs = 2500) {
       const id = `t${++seq}`
-      set({ ...state, toasts: [...state.toasts, { id, message }] }, 'toast')
+      set({ ...state, toasts: [...state.toasts, { id, message, level }] }, 'toast')
       const timer = setTimeout(() => {
         timers.delete(timer)
         set({ ...state, toasts: state.toasts.filter((t) => t.id !== id) }, 'toast')
@@ -62,8 +58,6 @@ export function createUiStore(): UiStore {
     dismissToast(id) {
       set({ ...state, toasts: state.toasts.filter((t) => t.id !== id) }, 'toast')
     },
-    openModal(modal) { set({ ...state, modal }, 'modal') },
-    closeModal() { if (state.modal) set({ ...state, modal: null }, 'modal') },
     setField(formId, name, value) {
       const f = form(formId)
       if (f.values[name] === value) return
