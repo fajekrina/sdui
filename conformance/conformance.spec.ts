@@ -29,12 +29,16 @@ async function snapshot(browser: Browser, fixture: string, baseURL: string) {
   await page.waitForFunction(() => (window as unknown as { __sduiReady?: boolean }).__sduiReady === true)
   const result = await page.evaluate((keys) => {
     const root = document.querySelector('[data-sdui-screen]')!
-    return [...root.querySelectorAll('*')].map((el) => {
+    // <option>s of a closed <select> are drawn by the platform popup, not laid out in
+    // the page — their computed style and box are meaningless. Their values and
+    // labels are compared as part of the <select> instead.
+    return [...root.querySelectorAll('*')].filter((el) => el.tagName !== 'OPTION').map((el) => {
       const cs = getComputedStyle(el)
       const box = el.getBoundingClientRect()
+      const options = el.tagName === 'SELECT' ? [...el.querySelectorAll('option')].map((o) => `${o.value}:${o.textContent}`).join('|') : ''
       return {
         tag: el.tagName.toLowerCase(),
-        attrs: [...el.attributes].filter((a) => a.name !== 'style').map((a) => `${a.name}=${a.value}`).sort().join(' '),
+        attrs: [...el.attributes].filter((a) => a.name !== 'style').map((a) => `${a.name}=${a.value}`).sort().join(' ') + (options ? ` options=${options}` : ''),
         text: el.childNodes.length && el.firstChild?.nodeType === 3 ? el.firstChild.textContent : '',
         style: Object.fromEntries(keys.map((k) => [k, cs.getPropertyValue(k)])),
         box: [box.x, box.y, box.width, box.height]
