@@ -86,7 +86,48 @@ Breaking since 0.5.0 — the engine configuration every host must set:
 - [ ] Only the fixed local origin may use the bridge; file access off.
 - [ ] `native.command` only runs allow-listed commands.
 - [ ] The backend honours `Idempotency-Key`: one key per **submission** (a retry after a timeout reuses it;
-      changed form values start a new one) — duplicates must not execute twice.
+      changed form values start a new one) — duplicates must not execute twice. This key lives only in the
+      screen's memory; money movement also needs a **server-issued transaction id** (below).
+- [ ] The local origin is a **secure context**: a release build checks `window.isSecureContext === true` at
+      start (Android `https://appassets.androidplatform.net` is; verify the iOS custom scheme on every
+      supported iOS version). `crypto.subtle` — and with it `webCryptoEd25519` signature verification and
+      `aesGcmCipher` — exists only in a secure context. Ids still work without one (`randomId()` falls back to
+      `crypto.getRandomValues`), but signed payloads can't be verified, so every screen fails closed.
+- [ ] Call `screen.applyPendingUpdate()` when a newer layout may be shown (see below).
+
+### Transaction ids for transfers
+
+The `Idempotency-Key` protects retries **inside one screen visit**. If the user leaves the screen or the app is
+killed after a timeout and then submits again, a new key is created. For transfers the backend is the safety
+net: it issues a transaction id through `screen.load`, the submit sends it back, and the backend executes each
+id at most once. Reopening the screen should return the same still-open draft rather than a new one.
+
+```json
+{
+  "schemaVersion": "1.1",
+  "screen": {
+    "key": "transfer",
+    "load": [{ "request": "newTransfer" }],
+    "root": { "type": "form", "id": "transfer", "children": [
+      { "type": "button", "props": { "title": "Kirim" },
+        "action": { "type": "api", "request": "submitTransfer",
+          "params": { "transferId": "{{newTransfer.transferId}}", "amount": "{{form.amount}}" } } }
+    ] }
+  }
+}
+```
+
+### Deferred layout updates (`applyPendingUpdate`)
+
+A newer layout found by stale-while-revalidate is **not** swapped in while the user is filling a form or an
+action runs; `screen.hasPendingUpdate` turns `true` and `screen_update_deferred` is emitted. It is applied
+automatically once no action runs and no form holds unsubmitted input — a form whose values were just
+submitted successfully counts as clean. Otherwise the host applies it at a moment the swap can't surprise the
+user:
+
+- when the screen becomes visible again (Android `onResume`, iOS `viewWillAppear`, or after a `dismiss` back to it),
+- when the app returns to the foreground,
+- never while the keyboard is up or a dialog/sheet is open on top.
 
 ## Bundle distribution (downloaded and cached)
 

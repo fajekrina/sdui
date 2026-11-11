@@ -73,7 +73,9 @@ export interface EngineInit {
   assetURL?: (name: string) => string
   /// localized field-validation messages (default English; `MESSAGES_ID` in `./i18n`)
   messages?: Partial<FieldMessages>
-  /// unique ids (idempotency keys). Default: `crypto.randomUUID()`
+  /// unique ids (idempotency keys). Default: `randomId()` — `crypto.randomUUID()`,
+  /// falling back to a v4 UUID from `crypto.getRandomValues` (older WebViews,
+  /// non-secure contexts)
   newId?: () => string
   /// layout width, for `screen.variants`
   viewport?: ViewportPort
@@ -135,7 +137,7 @@ export class SduiEngine {
     this.manifestLoader = init.manifestLoader
     this.assetURL = init.assetURL ?? relativeAssetURL
     this.messages = { ...MESSAGES_EN, ...(init.messages ?? {}) }
-    this.newId = init.newId ?? (() => globalThis.crypto.randomUUID())
+    this.newId = init.newId ?? randomId
     this.viewport = init.viewport
     this.onEvent = init.onEvent
   }
@@ -364,6 +366,26 @@ const MANIFEST_KEY = 'sdui:manifest'
 const REVALIDATE_MEMORY_MS = 30_000
 
 /// `createEngine({...})` — the functional entry point.
+let idCounter = 0
+
+/// A v4 UUID. `crypto.randomUUID()` exists only in secure contexts on recent
+/// engines (Chromium 92+, Safari 15.4+); `crypto.getRandomValues` is available
+/// everywhere a WebView runs, secure context or not. Without either (no Web Crypto
+/// at all) a time + counter id keeps keys unique within the app session — an
+/// idempotency key only has to be unique, not secret.
+export function randomId(): string {
+  const c = (globalThis as { crypto?: Crypto }).crypto
+  if (typeof c?.randomUUID === 'function') return c.randomUUID()
+  if (typeof c?.getRandomValues === 'function') {
+    const b = c.getRandomValues(new Uint8Array(16))
+    b[6] = (b[6]! & 0x0f) | 0x40   // version 4
+    b[8] = (b[8]! & 0x3f) | 0x80   // RFC 4122 variant
+    const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+  }
+  return `${Date.now().toString(36)}-${(++idCounter).toString(36)}`
+}
+
 export function createEngine(init: EngineInit = {}): SduiEngine {
   return new SduiEngine(init)
 }

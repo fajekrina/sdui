@@ -1,6 +1,6 @@
 {
   "name": "@fajekrina/sdui",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "SDUI engine on the murti-derived spec: one headless engine (MurtiEngine structure), generic React/Vue/vanilla renderers, native-bridge ports for Android/iOS WebView hosts. No Tailwind/Bootstrap bundled.",
   "license": "MIT",
   "type": "module",

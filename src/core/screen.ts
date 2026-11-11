@@ -53,6 +53,8 @@ export class ScreenController {
   /// one idempotency key per submission: reused on retry (same handler, same form
   /// values) until a chain completes without an api failure
   private readonly submissions = new Map<string, { key: string; fingerprint: string }>()
+  /// form values at their last successful submission: equal values are not "dirty"
+  private readonly submitted = new Map<string, string>()
   /// a newer screen found while the user was mid-interaction (applied later)
   private pendingUpdate?: ScreenSpec
   private readonly timers = new Set<ReturnType<typeof setTimeout>>()
@@ -131,8 +133,10 @@ export class ScreenController {
     if (this.pendingUpdate) this.applyUpdate(this.pendingUpdate)
   }
 
+  /// A form is dirty when the user typed something not yet submitted successfully.
   private formsDirty(): boolean {
-    return Object.values(this.ui.getState().forms).some((f) => Object.values(f.values).some((v) => v !== ''))
+    return Object.entries(this.ui.getState().forms).some(([id, f]) =>
+      Object.values(f.values).some((v) => v !== '') && this.submitted.get(id) !== sortedJSONStringify(f.values))
   }
 
   private async runLoads(requests: Array<{ request: string; params?: SduiProps }>, token: number): Promise<void> {
@@ -261,7 +265,10 @@ export class ScreenController {
     try {
       await this.dispatch(handler.action, data, idempotencyKey, outcome)
     } finally {
-      if (!outcome.apiFailed) this.submissions.delete(submissionId)   // done: the next tap is a new submission
+      if (!outcome.apiFailed) {
+        this.submissions.delete(submissionId)                           // done: the next tap is a new submission
+        if (handler.formId) this.submitted.set(handler.formId, fingerprint)   // and the form is clean again
+      }
       if (outcome.navigated) {
         // navigation is fire-and-forget: hold the lock while the host opens the
         // next screen, so a fast second tap can't open it twice

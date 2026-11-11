@@ -3,6 +3,22 @@
 Semua perubahan penting paket ini dicatat di sini. Format mengikuti Keep a Changelog;
 versi mengikuti Semantic Versioning (0.x: breaking change boleh di minor dengan catatan jelas).
 
+## [0.6.1] — 2026-11-11
+
+Menutup catatan lanjutan review 0.5.0.
+
+### Diperbaiki
+- **#1 Id tanpa `crypto.randomUUID()`.** Sumber id default kini `randomId()`: `crypto.randomUUID()` →
+  UUID v4 dari `crypto.getRandomValues` (WebView lama / bukan secure context) → id waktu + penghitung bila Web Crypto
+  tidak ada sama sekali. `handle()` tidak lagi bisa melempar di sini, jadi tombol tidak lagi diam tanpa pesan.
+  Gerbang kemurnian core mengizinkan `getRandomValues` (sumber acak, bukan I/O); `crypto.subtle` tetap port.
+- **#5 Form yang baru sukses dikirim dihitung bersih**, jadi pembaruan layout yang tertunda langsung diterapkan
+  setelah submit sukses tanpa navigasi.
+
+### Dokumentasi
+- `HOST-BRIDGE.md`: origin lokal wajib secure context (cek `window.isSecureContext`, terutama skema kustom iOS);
+  id transaksi dari backend lewat `screen.load` untuk transfer (#4); kapan host memanggil `applyPendingUpdate()` (#5).
+
 ## [0.6.0] — 2026-11-11
 
 Menutup temuan review 0.5.0. Tes regresi: `tests/review-0.5.test.ts`.

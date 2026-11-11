@@ -38,7 +38,7 @@ export { PayloadSecurity } from './security'
 export { SduiCache, cacheKey, CacheCoordinator, Manifest, MemoryCacheStore, PassthroughCipher, type CacheStore, type CacheCipher } from './cache'
 
 // Engine
-export { SduiEngine, createEngine, relativeAssetURL, ScreenSource, LoadState, type EngineInit, type LoadOrigin, type LoadOptions } from './engine'
+export { SduiEngine, createEngine, randomId, relativeAssetURL, ScreenSource, LoadState, type EngineInit, type LoadOrigin, type LoadOptions } from './engine'
 export { ScreenController, errorView, type RenderOptions } from './screen'
 export type { SduiEvent } from './events'
 

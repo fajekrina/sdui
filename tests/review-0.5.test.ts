@@ -1,7 +1,7 @@
 // Regression tests for the 0.5.0 review findings (each named by its number).
 import { describe, expect, it, vi } from 'vitest'
 import {
-  ActionDispatcher, MemoryCacheStore, ScreenFactory, ScreenSource, SduiCache, SduiError, utf8,
+  ActionDispatcher, MemoryCacheStore, ScreenFactory, ScreenSource, SduiCache, SduiError, randomId, utf8,
   type NetworkClient, type SduiEvent
 } from '../src/core'
 import { MESSAGES_ID } from '../src/i18n'
@@ -54,9 +54,41 @@ describe('#1 one idempotency key per submission', () => {
     expect(keys).toEqual(['id-1:pay', 'id-2:pay'])
   })
 
+  const UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
   it('the default id source is crypto.randomUUID', () => {
-    const id = devEngine().newId()
-    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    expect(devEngine().newId()).toMatch(UUID4)
+  })
+
+  it('falls back to getRandomValues, then to a unique time+counter id (never throws)', () => {
+    const real = globalThis.crypto
+    try {
+      Object.defineProperty(globalThis, 'crypto', { configurable: true, value: { getRandomValues: real.getRandomValues.bind(real) } })
+      const a = randomId(), b = randomId()
+      expect(a).toMatch(UUID4)
+      expect(a).not.toBe(b)
+      Object.defineProperty(globalThis, 'crypto', { configurable: true, value: undefined })
+      const c = randomId(), d = randomId()
+      expect(c).not.toBe(d)
+    } finally {
+      Object.defineProperty(globalThis, 'crypto', { configurable: true, value: real })
+    }
+  })
+
+  it('a tap still runs its action without crypto.randomUUID', async () => {
+    const real = globalThis.crypto
+    try {
+      Object.defineProperty(globalThis, 'crypto', { configurable: true, value: { getRandomValues: real.getRandomValues.bind(real) } })
+      const keys: Array<string | undefined> = []
+      const network: NetworkClient = { async perform(_r, _p, o) { keys.push(o?.idempotencyKey); return utf8('{}') } }
+      const screen = devEngine({ actionDispatcher: new ActionDispatcher({ network }) })
+        .screen(ScreenSource.inline(form({ type: 'button', props: { title: 'Pay' }, action: { type: 'api', request: 'pay' } })))
+      await screen.load()
+      screen.setFieldValue('f', 'amount', '100')
+      await screen.handle(screen.render().nodes[0]!.children[1]!.on!.click!)
+      expect(keys[0]).toMatch(/^[0-9a-f-]{36}:pay$/)
+    } finally {
+      Object.defineProperty(globalThis, 'crypto', { configurable: true, value: real })
+    }
   })
 })
 
@@ -90,6 +122,33 @@ describe('#2 a newer layout never swaps under a user mid-interaction', () => {
     expect(screen.hasPendingUpdate).toBe(true)
     expect(events.some((e) => e.type === 'screen_update_deferred')).toBe(true)
     screen.applyPendingUpdate()
+    expect(title(screen)).toBe('v2')
+  })
+
+  it('a successfully submitted form is clean: the deferred layout applies after submit', async () => {
+    let published = page('v1')
+    const network: NetworkClient = { async perform() { return utf8('{}') } }
+    const store = new MemoryCacheStore()
+    const doc = (title: string) => JSON.stringify({
+      schemaVersion: '1.1',
+      screen: { key: 'home', root: { type: 'form', id: 'f', children: [
+        { type: 'text', props: { value: title } },
+        { type: 'textField', props: { name: 'note' } },
+        { type: 'button', props: { title: 'Save' }, action: { type: 'api', request: 'save' } }
+      ] } }
+    })
+    published = doc('v1')
+    const factory = () => new ScreenFactory().register('home', () => published)
+    await devEngine({ screenFactory: factory(), cache: new SduiCache({ store }) }).load(ScreenSource.key('home'))
+    const engine = devEngine({ screenFactory: factory(), cache: new SduiCache({ store }), actionDispatcher: new ActionDispatcher({ network }) })
+    published = doc('v2')
+    const screen = engine.screen(ScreenSource.key('home'))
+    await screen.load()
+    screen.setFieldValue('f', 'note', 'hello')
+    await engine.settled()
+    expect(screen.hasPendingUpdate).toBe(true)
+    await screen.handle(screen.render().nodes[0]!.children[2]!.on!.click!)   // saved, no navigation
+    expect(screen.hasPendingUpdate).toBe(false)
     expect(title(screen)).toBe('v2')
   })
 
