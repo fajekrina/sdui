@@ -355,11 +355,17 @@ function fieldRule(node: SduiNode): FieldRule {
   }
 }
 
+/// Form controls get explicit metrics (height, line-height, no native
+/// appearance) so Android WebView (Chromium) and WKWebView (WebKit) lay them out
+/// identically — their intrinsic select/textarea sizes differ.
+const FIELD_LINE = 22
 const FIELD_STYLE: Record<string, string> = {
-  display: 'block', width: '100%', boxSizing: 'border-box', font: 'inherit', fontSize: '16px',
+  display: 'block', width: '100%', boxSizing: 'border-box', margin: '0', font: 'inherit', fontSize: '16px',
+  lineHeight: `${FIELD_LINE}px`, height: `${FIELD_LINE + 22}px`,
   padding: '10px 12px', border: `1px solid ${color('border')}`, borderRadius: '8px',
-  background: color('background')!, color: color('onSurface')!
+  background: color('background')!, color: color('onSurface')!, appearance: 'none'
 }
+const CHEVRON = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236B7280' stroke-width='2'/%3E%3C/svg%3E\")"
 
 function field(node: SduiNode, ctx: RenderContext, control: (attrs: Record<string, string | number | boolean>, value: string) => RenderNode): RenderNode {
   const key = ctx.keyFor(node)
@@ -409,14 +415,16 @@ export class TextFieldComponent implements Component {
   }
 }
 
+const rows = (node: SduiNode) => Math.min(20, Math.max(1, Math.trunc(numberProp(node, 'rows') ?? 3)))
+
 export class TextAreaComponent implements Component {
   static readonly type = 'textArea'
   static readonly category = 'form'
   static readonly defaultProps = { name: 'notes', label: 'Notes', rows: 3 }
   makeView(node: SduiNode, ctx: RenderContext): RenderNode {
     return field(node, ctx, (attrs, value) => renderNode(`${ctx.keyFor(node)}:control`, 'textarea', {
-      attrs: cleanAttrs({ ...attrs, rows: Math.min(20, Math.max(1, Math.trunc(numberProp(node, 'rows') ?? 3))), value: ctx.interactive ? value : undefined }),
-      style: { ...FIELD_STYLE, resize: 'vertical' }
+      attrs: cleanAttrs({ ...attrs, rows: rows(node), value: ctx.interactive ? value : undefined }),
+      style: { ...FIELD_STYLE, height: `${rows(node) * FIELD_LINE + 22}px`, resize: 'vertical' }
     }))
   }
 }
@@ -434,7 +442,7 @@ export class PickerComponent implements Component {
     })
     return field(node, ctx, (attrs, value) => renderNode(`${key}:control`, 'select', {
       attrs: cleanAttrs({ ...attrs, value: ctx.interactive ? value : undefined }),
-      style: FIELD_STYLE,
+      style: { ...FIELD_STYLE, paddingRight: '32px', backgroundImage: CHEVRON, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' },
       children: [renderNode(`${key}:opt`, 'option', { attrs: { value: '' }, text: node.string('placeholder') || 'Select…' }), ...options]
     }))
   }

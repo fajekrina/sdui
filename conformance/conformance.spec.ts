@@ -6,6 +6,9 @@ import { readdirSync } from 'node:fs'
 const FIXTURES = readdirSync('spec/fixtures/valid').filter((f) => f.endsWith('.json') && f !== 'envelope.json')
 const STYLE_KEYS = ['display', 'flex-direction', 'align-items', 'gap', 'padding-top', 'padding-left', 'font-size', 'font-weight', 'color', 'background-color', 'border-radius']
 const TOLERANCE_PX = 2
+/// Computed-value spellings that mean the same thing (engines serialize differently).
+const SAME: Record<string, string> = { 'flow-start': 'flex-start', 'flow-end': 'flex-end', start: 'flex-start', end: 'flex-end', normal: 'stretch' }
+const canon = (style: Record<string, string>) => Object.fromEntries(Object.entries(style).map(([k, v]) => [k, SAME[v] ?? v]))
 /// The engine pair to compare. CI: chromium,webkit. `CONFORMANCE_PAIR=chromium,chromium`
 /// smoke-tests the harness where WebKit can't run (e.g. Windows without its system DLLs).
 const ENGINES: Record<string, BrowserType> = { chromium, webkit, firefox }
@@ -45,7 +48,7 @@ for (const fixture of FIXTURES) {
         expect(other.tag, `element ${i}`).toBe(el.tag)
         expect(other.attrs, `${el.tag}[${i}] attrs`).toBe(el.attrs)
         expect(other.text, `${el.tag}[${i}] text`).toBe(el.text)
-        expect(other.style, `${el.tag}[${i}] style`).toEqual(el.style)
+        expect(canon(other.style), `${el.tag}[${i}] style`).toEqual(canon(el.style))
         el.box.forEach((v, j) => expect(Math.abs(other.box[j]! - v), `${el.tag}[${i}] box[${j}]`).toBeLessThanOrEqual(TOLERANCE_PX * (j < 2 ? 1 + i / 10 : 1)))
       })
     } finally {

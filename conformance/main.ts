@@ -7,7 +7,7 @@ const name = new URLSearchParams(location.search).get('fixture') ?? 'dashboard.j
 const seed = { user: { name: 'Ada', segment: 'gold' }, getBalance: { amount: 1250 }, getPromos: { items: [{ title: 'Cashback' }, { title: 'Points' }] } }
 const response = await fetch(`/spec/fixtures/valid/${name}`)
 const payload = await response.json()
-const view = mount(document.getElementById('app')!, { engine: createEngine({ security: PayloadSecurity.insecureDevelopment }), source: { payload }, seed })
+const view = mount(document.getElementById('app')!, { engine: createEngine({ security: PayloadSecurity.insecureDevelopment, assetURL: () => '/conformance/asset.png' }), source: { payload }, seed })
 await view.screen.load()
 // settle images (loaded or failed) so layout is final before the snapshot
 await Promise.all([...document.images].map((img) => img.complete ? null : new Promise((r) => { img.onload = img.onerror = r })))

@@ -31,6 +31,10 @@ Menutup temuan review 0.4.0 (1–10). Setiap temuan punya tes regresi di `tests/
   (`host.back`, `host.theme`, `host.viewport`); balasan harus cocok dengan id yang sedang ditunggu.
 - **#10** Pesan validasi bisa dilokalkan: `createEngine({ messages })`; tersedia `MESSAGES_EN`, `MESSAGES_ID`.
 - **#11** `DESAIN-ARSITEKTUR-SDUI.docx` dikeluarkan dari repo (`*.docx` di `.gitignore`).
+- **Conformance Chromium ≡ WebKit (CI):** kontrol form kini punya metrik eksplisit (tinggi, line-height,
+  `appearance: none`, panah `<select>` sendiri; tinggi `textArea` dari `rows`), karena ukuran bawaan
+  select/textarea berbeda antar-engine. Harness memetakan aset ke PNG sungguhan (gambar 404 dirender beda per
+  engine) dan menyamakan ejaan nilai terhitung yang setara (`flow-start` ≡ `flex-start`).
 
 ## [0.4.0] — 2026-11-11 · BREAKING
 
