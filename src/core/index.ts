@@ -18,7 +18,7 @@ export { SduiBounds } from './bounds'
 export { SchemaValidator } from './validator'
 export { TokenResolver, tokenKeys, resolveValue } from './token'
 export { DataContext } from './data-context'
-export { FIELD_PATTERNS, MESSAGES_EN, MESSAGES_ID, validateField, type FieldRule, type FieldMessages } from './patterns'
+export { FIELD_PATTERNS, MESSAGES_EN, validateField, type FieldRule, type FieldMessages } from './patterns'
 
 // Rendering
 export { renderNode, cleanAttrs, type RenderNode, type RenderElement, type RenderResult } from './render-node'

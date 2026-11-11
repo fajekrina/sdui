@@ -71,8 +71,10 @@ export interface EngineInit {
   /// URLs (`https:`, `//host`, `data:` …) are refused, so a payload can't load
   /// images from an arbitrary host. Map names to your CDN here.
   assetURL?: (name: string) => string
-  /// localized field-validation messages (default English; `MESSAGES_ID` ships)
+  /// localized field-validation messages (default English; `MESSAGES_ID` in `./i18n`)
   messages?: Partial<FieldMessages>
+  /// unique ids (idempotency keys). Default: `crypto.randomUUID()`
+  newId?: () => string
   /// layout width, for `screen.variants`
   viewport?: ViewportPort
   /// observability hook
@@ -99,6 +101,7 @@ export class SduiEngine {
   readonly logger: Logger
   readonly debug: boolean
   readonly messages: FieldMessages
+  readonly newId: () => string
   private readonly namedResolver?: (name: string) => Promise<BytesLike>
   private readonly manifestLoader?: () => Promise<BytesLike>
   private readonly onEvent?: (event: SduiEvent) => void
@@ -132,6 +135,7 @@ export class SduiEngine {
     this.manifestLoader = init.manifestLoader
     this.assetURL = init.assetURL ?? relativeAssetURL
     this.messages = { ...MESSAGES_EN, ...(init.messages ?? {}) }
+    this.newId = init.newId ?? (() => globalThis.crypto.randomUUID())
     this.viewport = init.viewport
     this.onEvent = init.onEvent
   }

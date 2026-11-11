@@ -36,7 +36,8 @@ npm install @fajekrina/sdui
 ## Quickstart (browser)
 
 ```ts
-import { ActionDispatcher, MESSAGES_ID, PayloadSecurity, ScreenFactory, SduiCache, createEngine } from '@fajekrina/sdui'
+import { ActionDispatcher, PayloadSecurity, ScreenFactory, SduiCache, createEngine } from '@fajekrina/sdui'
+import { MESSAGES_ID } from '@fajekrina/sdui/i18n'
 import { browserNavigator, fetchNetworkClient, indexedDbStore, universalScreenProvider, webCryptoEd25519, windowViewport } from '@fajekrina/sdui/browser'
 
 const engine = createEngine({
@@ -149,5 +150,5 @@ npm run size         # bundle budget
 npm run conformance  # Chromium ≡ WebKit (npx playwright install chromium webkit once)
 ```
 
-See [CHANGELOG.md](CHANGELOG.md) and [HANDOFF.md](HANDOFF.md). Licensed MIT; the spec
+See [CHANGELOG.md](CHANGELOG.md). Licensed MIT; the spec
 and murti-derived parts are Apache-2.0 — see [NOTICE](NOTICE).

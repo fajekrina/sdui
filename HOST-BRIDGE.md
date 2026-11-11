@@ -70,13 +70,23 @@ Replies must arrive within 15 s or the call fails (and the payload's `onError` r
 
 ### Host checklist
 
-- [ ] The engine is created with `PayloadSecurity.signed(...)` (without it, release builds reject every payload).
+Breaking since 0.5.0 — the engine configuration every host must set:
+
+- [ ] `security: PayloadSecurity.signed(...)` — without it, a release engine **rejects every payload**
+      (only `debug: true` accepts unsigned ones, with a warning).
+- [ ] `messages: MESSAGES_ID` (from `@fajekrina/sdui/i18n`) — otherwise validation messages are English.
+- [ ] `assetURL: (name) => …` mapping image names to your CDN — the default resolves relative paths only
+      and refuses absolute URLs, so remote images stay blank until this is set.
+- [ ] Ignore a duplicate `navigator.navigate` to the screen already being opened (the web side also holds
+      its tap lock for 1 s after a navigation).
 - [ ] The payload public key(s) and the bundle public key are embedded; they are different keys.
 - [ ] The highest applied bundle `sequence` is **persisted** (Keystore/Keychain-backed storage) and checked at
       start; an older bundle is rejected even after a reinstall-free restart.
 - [ ] `auth.token` returns minutes-long tokens with a narrow audience.
 - [ ] Only the fixed local origin may use the bridge; file access off.
 - [ ] `native.command` only runs allow-listed commands.
+- [ ] The backend honours `Idempotency-Key`: one key per **submission** (a retry after a timeout reuses it;
+      changed form values start a new one) — duplicates must not execute twice.
 
 ## Bundle distribution (downloaded and cached)
 
@@ -108,12 +118,28 @@ WebKit on every PR.
 ## Web side, in one call
 
 ```ts
+import { ActionDispatcher, ActionSpec, PayloadSecurity, ScreenFactory, ScreenSource, SduiCache, createEngine, keyedVerifier } from '@fajekrina/sdui'
+import { fetchNetworkClient, indexedDbStore, universalScreenProvider, webCryptoEd25519 } from '@fajekrina/sdui/browser'
+import { applyTheme, nativeBridgePorts } from '@fajekrina/sdui/bridge'
+import { MESSAGES_ID } from '@fajekrina/sdui/i18n'
+
 const host = nativeBridgePorts()
+const engine = createEngine({
+  // required: without it every payload is rejected
+  security: PayloadSecurity.signed(keyedVerifier({ k2026: await webCryptoEd25519(PAYLOAD_PUBLIC_KEY) })),
+  messages: MESSAGES_ID,
+  assetURL: (name) => `https://cdn.example.com/sdui/${encodeURIComponent(name)}.webp`,
+  screenFactory: new ScreenFactory().registerFallback(universalScreenProvider({ baseUrl, merchantId, getHeaders: host.getHeaders })),
+  actionDispatcher: new ActionDispatcher({
+    navigator: host.navigator, host: host.host,
+    network: fetchNetworkClient({ baseUrl, endpoints, getHeaders: host.getHeaders })   // token pattern B
+  }),
+  cache: new SduiCache({ store: indexedDbStore() }),
+  manifestLoader: () => fetch(`${baseUrl}/client/manifest/${merchantId}`).then((r) => r.arrayBuffer()),
+  viewport: host.viewport,
+  onEvent: host.onEvent
+})
+const screen = engine.screen(ScreenSource.key('home'))
 host.onHostEvent('host.back', () => screen.dispatch(new ActionSpec({ type: 'dismiss' })))
 host.onHostEvent('host.theme', (data) => applyTheme(data.colors as Record<string, string>))
-const engine = createEngine({
-  actionDispatcher: new ActionDispatcher({ navigator: host.navigator, host: host.host,
-    network: fetchNetworkClient({ baseUrl, endpoints, getHeaders: host.getHeaders }) }),
-  viewport: host.viewport, onEvent: host.onEvent
-})
 ```

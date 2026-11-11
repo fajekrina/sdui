@@ -12,4 +12,5 @@ export type SduiEvent =
   | { type: 'form_invalid'; formId: string; fields: string[] }
   | { type: 'rollback_rejected'; sequence: number }
   | { type: 'screen_revalidated'; key: string; changed: boolean; error?: string }
+  | { type: 'screen_update_deferred'; key: string }
   | { type: 'bridge_error'; method: string; message: string }

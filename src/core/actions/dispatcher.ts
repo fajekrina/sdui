@@ -6,8 +6,16 @@ import type { DataContext } from '../data-context'
 import type { ActionSpec, ActionType, ToastLevel } from './spec'
 
 /// What a command can touch while it runs — everything else stays out of reach.
+/// What an action chain did — the screen uses it to keep or drop the submission's
+/// idempotency key and to hold the double-tap lock across a navigation.
+export interface ChainOutcome {
+  apiFailed: boolean
+  navigated: boolean
+}
+
 export interface ActionContext {
   data: DataContext
+  outcome?: ChainOutcome
   /// one per user tap; each `api` call in the chain derives its own from it
   idempotencyKey?: string
   network: NetworkClient
@@ -36,6 +44,7 @@ class NavigateCommand implements Command {
   async execute(spec: ActionSpec, ctx: ActionContext, d: ActionDispatcher) {
     if (spec.screen === undefined) return
     ctx.navigator.navigate(spec.screen, params(spec, ctx.data), { presentation: spec.presentation ?? 'push' })
+    if (ctx.outcome) ctx.outcome.navigated = true
     ctx.emit?.({ type: 'action_dispatched', action: 'navigate', ok: true, target: spec.screen })
     if (spec.onSuccess) await d.dispatch(spec.onSuccess, ctx)
   }
@@ -95,6 +104,7 @@ class APICommand implements Command {
   }
 
   private async fail(spec: ActionSpec, ctx: ActionContext, d: ActionDispatcher) {
+    if (ctx.outcome) ctx.outcome.apiFailed = true
     ctx.emit?.({ type: 'action_dispatched', action: 'api', ok: false, target: spec.request })
     if (spec.onError) await d.dispatch(spec.onError, ctx)
   }

@@ -26,10 +26,6 @@ const PATTERN_EN: Record<string, string> = {
   numeric: 'must contain digits only', alphanumeric: 'must contain letters and digits only', email: 'must be a valid email',
   phoneId: 'must be a valid Indonesian mobile number', amount: 'must be a positive amount', pin6: 'must be 6 digits', nik: 'must be 16 digits'
 }
-const PATTERN_ID: Record<string, string> = {
-  numeric: 'hanya boleh berisi angka', alphanumeric: 'hanya boleh berisi huruf dan angka', email: 'harus berupa email yang valid',
-  phoneId: 'harus berupa nomor ponsel Indonesia yang valid', amount: 'harus berupa nominal positif', pin6: 'harus 6 digit', nik: 'harus 16 digit'
-}
 
 export const MESSAGES_EN: FieldMessages = {
   required: (l) => `${l} is required`,
@@ -39,13 +35,6 @@ export const MESSAGES_EN: FieldMessages = {
   unknownPattern: (l) => `${l} cannot be validated`
 }
 
-export const MESSAGES_ID: FieldMessages = {
-  required: (l) => `${l} wajib diisi`,
-  minLength: (l, n) => `${l} minimal ${n} karakter`,
-  maxLength: (l, n) => `${l} maksimal ${n} karakter`,
-  pattern: (l, p) => `${l} ${PATTERN_ID[p] ?? 'tidak valid'}`,
-  unknownPattern: (l) => `${l} tidak dapat divalidasi`
-}
 
 export interface FieldRule {
   name: string

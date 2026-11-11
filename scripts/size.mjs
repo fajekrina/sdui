@@ -6,12 +6,16 @@ import { gzipSync } from 'node:zlib'
 
 const EXTERNAL = ['react', 'react-dom', 'react/jsx-runtime', 'vue']
 const BUDGETS_KB = {
-  'src/core/index.ts': 18,      // everything the engine exports
+  // Everything the engine exports: 16 components, validator, cache tiers, security,
+  // forms, SWR, idempotency. Raised 18 → 20 KB in 0.6.0 by decision (review 0.5.0 #4)
+  // after moving rarely used locales to ./i18n. Raising it again needs a CHANGELOG note.
+  'src/core/index.ts': 20,
   'src/react/index.ts': 3,      // <SduiScreen>; the engine comes from the app
   'src/vue/index.ts': 3,
   'src/vanilla/index.ts': 3,
   'src/browser/index.ts': 4,
-  'src/bridge/index.ts': 5
+  'src/bridge/index.ts': 5,
+  'src/i18n/index.ts': 1
 }
 
 async function gzipKB(entry, external) {

@@ -3,6 +3,27 @@
 Semua perubahan penting paket ini dicatat di sini. Format mengikuti Keep a Changelog;
 versi mengikuti Semantic Versioning (0.x: breaking change boleh di minor dengan catatan jelas).
 
+## [0.6.0] — 2026-11-11
+
+Menutup temuan review 0.5.0. Tes regresi: `tests/review-0.5.test.ts`.
+
+### Diubah
+- **#4 (BREAKING import)** `MESSAGES_ID` pindah ke entry baru **`@fajekrina/sdui/i18n`** (core hanya membawa
+  `MESSAGES_EN`). Budget core dinaikkan **sadar** 18 → 20 KB (`scripts/size.mjs` mencatat alasannya); kenaikan
+  berikutnya wajib dicatat di sini. Ukuran sekarang 18,1 KB.
+
+### Diperbaiki
+- **#1 Idempotency per pengiriman.** Satu kunci per *submission*: tap ulang setelah gagal/timeout dengan nilai form
+  yang sama memakai kunci yang sama; nilai form berubah atau rantai sukses → kunci baru. Sumber id `crypto.randomUUID()`
+  (bisa diganti lewat `createEngine({ newId })`); `Math.random` tidak dipakai lagi.
+- **#2 Pembaruan SWR tidak mengganti layar di tengah interaksi.** Bila form kotor atau aksi berjalan, layout baru
+  ditunda (`screen.hasPendingUpdate`, event `screen_update_deferred`) dan diterapkan saat idle atau lewat
+  `screen.applyPendingUpdate()`; `screen.load` dijalankan ulang bila daftarnya berubah.
+- **#3 Kunci tap ganda ditahan 1 dtk setelah `navigate`** (navigasi fire-and-forget), jadi tap kedua yang cepat
+  tidak membuka layar dua kali.
+- **#6** `HOST-BRIDGE.md`: checklist konfigurasi wajib sejak 0.5.0 (`PayloadSecurity.signed`, `MESSAGES_ID`,
+  `assetURL` ke CDN, navigasi ganda, `Idempotency-Key` per pengiriman) dan contoh konfigurasi lengkap.
+
 ## [0.5.0] — 2026-11-11 · BREAKING (default keamanan)
 
 Menutup temuan review 0.4.0 (1–10). Setiap temuan punya tes regresi di `tests/review-0.4.test.ts`.

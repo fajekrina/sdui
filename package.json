@@ -1,6 +1,6 @@
 {
   "name": "@fajekrina/sdui",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "SDUI engine on the murti-derived spec: one headless engine (MurtiEngine structure), generic React/Vue/vanilla renderers, native-bridge ports for Android/iOS WebView hosts. No Tailwind/Bootstrap bundled.",
   "license": "MIT",
   "type": "module",
@@ -40,6 +40,11 @@
       "types": "./dist/compat/index.d.ts",
       "import": "./dist/compat/index.js",
       "require": "./dist/compat/index.cjs"
+    },
+    "./i18n": {
+      "types": "./dist/i18n/index.d.ts",
+      "import": "./dist/i18n/index.js",
+      "require": "./dist/i18n/index.cjs"
     },
     "./react": {
       "types": "./dist/react/index.d.ts",

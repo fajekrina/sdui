@@ -2,10 +2,11 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  ActionDispatcher, MESSAGES_ID, Manifest, MemoryCacheStore, NamedRequest, PayloadSecurity, ScreenFactory, ScreenSource,
+  ActionDispatcher, Manifest, MemoryCacheStore, NamedRequest, PayloadSecurity, ScreenFactory, ScreenSource,
   SduiCache, createEngine, relativeAssetURL, sortedJSONStringify, utf8, type NetworkClient, type RenderNode, type SduiEvent
 } from '../src/core'
 import { fetchNetworkClient, webCryptoEd25519 } from '../src/browser'
+import { MESSAGES_ID } from '../src/i18n'
 import { Bridge, nativeBridgePorts, type BridgeTransport } from '../src/bridge'
 import { devEngine, envelopeJSON, flush, signingKey } from './helpers'
 

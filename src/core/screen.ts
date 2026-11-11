@@ -10,7 +10,12 @@ import { ERROR_TITLES, errorKindOf, type SduiError } from './errors'
 import { color } from './style'
 import { Symbols } from './components/symbols'
 import { NamedRequest, COMPACT_MAX_WIDTH } from '../ports'
-import type { ActionContext } from './actions/dispatcher'
+import type { ActionContext, ChainOutcome } from './actions/dispatcher'
+import { sortedJSONStringify } from './bytes'
+import type { ScreenSpec } from './payload'
+
+/// how long the double-tap lock is held after a navigate (fire-and-forget)
+const NAVIGATION_HOLD_MS = 1000
 import type { ActionSpec } from './actions/spec'
 import type { SduiEngine, LoadState, ScreenSource } from './engine'
 import type { SduiNode } from './node'
@@ -45,7 +50,12 @@ export class ScreenController {
   private loadToken = 0
   /// actions in flight: handler keys and `form:<id>` locks (double-tap guard)
   private readonly inFlight = new Set<string>()
-  private tapSeq = 0
+  /// one idempotency key per submission: reused on retry (same handler, same form
+  /// values) until a chain completes without an api failure
+  private readonly submissions = new Map<string, { key: string; fingerprint: string }>()
+  /// a newer screen found while the user was mid-interaction (applied later)
+  private pendingUpdate?: ScreenSpec
+  private readonly timers = new Set<ReturnType<typeof setTimeout>>()
 
   constructor(readonly engine: SduiEngine, readonly source: ScreenSource, seed: Record<string, SduiValue> = {}) {
     this.data = new DataContext(seed)
@@ -83,15 +93,46 @@ export class ScreenController {
       // stale-while-revalidate: a newer screen replaces the cached one in place
       onUpdate: (screen) => {
         if (token !== this.loadToken) return
-        this.state = { kind: 'loaded', screen, origin: 'network' }
-        this.changed()
+        // never swap the layout under a user who is filling a form or waiting on an action
+        if (this.inFlight.size > 0 || this.formsDirty()) {
+          this.pendingUpdate = screen
+          this.engine.emit({ type: 'screen_update_deferred', key: screen.key })
+          return
+        }
+        this.applyUpdate(screen, token)
       }
     })
     if (token !== this.loadToken) return next
+    this.pendingUpdate = undefined
     this.state = next
     this.changed()
     if (next.kind === 'loaded' && next.screen.load.length > 0) void this.runLoads(next.screen.load, token)
     return next
+  }
+
+  /// Replace the screen with a newer version; re-run `screen.load` when its list changed.
+  private applyUpdate(screen: ScreenSpec, token = this.loadToken): void {
+    const previous = this.state.kind === 'loaded' ? this.state.screen : undefined
+    this.pendingUpdate = undefined
+    this.state = { kind: 'loaded', screen, origin: 'network' }
+    this.changed()
+    if (screen.load.length > 0 && JSON.stringify(screen.load) !== JSON.stringify(previous?.load ?? [])) {
+      void this.runLoads(screen.load, token)
+    }
+  }
+
+  /// A deferred newer layout is waiting (a form was dirty or an action ran).
+  get hasPendingUpdate(): boolean {
+    return this.pendingUpdate !== undefined
+  }
+
+  /// Apply a deferred newer layout now (e.g. after the user leaves the form).
+  applyPendingUpdate(): void {
+    if (this.pendingUpdate) this.applyUpdate(this.pendingUpdate)
+  }
+
+  private formsDirty(): boolean {
+    return Object.values(this.ui.getState().forms).some((f) => Object.values(f.values).some((v) => v !== ''))
   }
 
   private async runLoads(requests: Array<{ request: string; params?: SduiProps }>, token: number): Promise<void> {
@@ -198,25 +239,48 @@ export class ScreenController {
       const original = data.merge.bind(data)
       data.merge = (v) => { original(v); this.data.merge(v) }
     }
+    // One idempotency key per submission: a retry of the same submission (same
+    // handler, same form values) after a failure or timeout reuses it, so the
+    // backend can drop the duplicate; changed values start a new submission.
+    const submissionId = formLock ?? key
+    const fingerprint = handler.formId ? sortedJSONStringify(this.ui.getState().forms[handler.formId]?.values ?? {}) : ''
+    const existing = this.submissions.get(submissionId)
+    const idempotencyKey = existing && existing.fingerprint === fingerprint ? existing.key : this.engine.newId()
+    this.submissions.set(submissionId, { key: idempotencyKey, fingerprint })
+
+    const outcome: ChainOutcome = { apiFailed: false, navigated: false }
     this.inFlight.add(key)
     if (formLock) this.inFlight.add(formLock)
     this.changed()
-    try {
-      await this.dispatch(handler.action, data, `${Date.now().toString(36)}-${(++this.tapSeq).toString(36)}-${Math.random().toString(36).slice(2, 10)}`)
-    } finally {
+    const release = () => {
       this.inFlight.delete(key)
       if (formLock) this.inFlight.delete(formLock)
       this.changed()
+      if (this.inFlight.size === 0 && this.pendingUpdate && !this.formsDirty()) this.applyPendingUpdate()
+    }
+    try {
+      await this.dispatch(handler.action, data, idempotencyKey, outcome)
+    } finally {
+      if (!outcome.apiFailed) this.submissions.delete(submissionId)   // done: the next tap is a new submission
+      if (outcome.navigated) {
+        // navigation is fire-and-forget: hold the lock while the host opens the
+        // next screen, so a fast second tap can't open it twice
+        const timer = setTimeout(() => { this.timers.delete(timer); release() }, NAVIGATION_HOLD_MS)
+        this.timers.add(timer)
+      } else {
+        release()
+      }
     }
   }
 
   /// Run an action against this screen's data (also used by hosts: e.g. the
   /// Android back button dispatches `{ type: 'dismiss' }`).
-  dispatch(action: ActionSpec, data: DataContext = this.data, idempotencyKey?: string): Promise<void> {
+  dispatch(action: ActionSpec, data: DataContext = this.data, idempotencyKey?: string, outcome?: ChainOutcome): Promise<void> {
     const dispatcher = this.engine.actionDispatcher
     const context: ActionContext = {
       data,
       idempotencyKey,
+      outcome,
       network: dispatcher.network,
       navigator: dispatcher.navigator,
       host: dispatcher.host,
@@ -234,6 +298,8 @@ export class ScreenController {
   }
 
   destroy(): void {
+    this.timers.forEach((t) => clearTimeout(t))
+    this.timers.clear()
     this.loadToken++
     this.abort?.abort()
     this.ui.destroy()
