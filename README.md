@@ -109,6 +109,27 @@ Or visually: `<SduiBuilder onSave={…} onPublish={…} />` (React/Vue) — the 
 uses the client's own components, export validates, and **Export DSL** turns any
 screen back into code.
 
+```tsx
+<SduiBuilder
+  title="merchant / home"
+  screens={['home', 'transfer']}          // navigate.screen
+  requests={['getBalance', 'createTransfer']} // api.request
+  links={['helpCenter']}                  // openURL.link
+  commands={['biometricConfirm']}         // native.command
+  onSave={(payload) => saveDraft(payload)}
+/>
+```
+
+- Drag components from the palette onto the canvas or the outline (or click to
+  insert); drop inside a container, or before/after a node. Drag nodes to move
+  them; the inspector's **parent** picker does the same.
+- **Preview** hides the editor chrome and renders the screen as the client does.
+- The action editor is a form per action type: the target is picked from the
+  name lists above (any other name can be typed), plus presentation, toast
+  message/level, params, and the `onSuccess`/`onError` chain. The lists are names
+  from the app's allow-lists — URLs never enter a payload.
+- Save/Publish report `Saved ✔` / `Save failed: …` in the toolbar.
+
 ## Extending
 
 ```ts

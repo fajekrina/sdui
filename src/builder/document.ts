@@ -98,6 +98,53 @@ export class EditorDocument {
     this.mutate({ root: insertingChild(this._root, withEnsuredIds(child), parentId, index) })
   }
 
+  /// Can the node with this id hold children (its component `acceptsChildren`)?
+  isContainer(id: string): boolean {
+    const node = find(this._root, id)
+    return !!node && this.factory.info(node.type)?.acceptsChildren === true
+  }
+
+  /// Where a drop relative to `targetId` lands: `inside` a container (last
+  /// child), or `before`/`after` it among its siblings. `undefined` when the
+  /// drop is not possible (e.g. inside a leaf, or beside the root).
+  placement(targetId: string, where: 'inside' | 'before' | 'after'): { parentId: string; index?: number } | undefined {
+    if (where === 'inside') return this.isContainer(targetId) ? { parentId: targetId } : undefined
+    const parent = parentOf(this._root, targetId)
+    if (!parent) return undefined
+    const index = parent.children.findIndex((c) => c.id === targetId)
+    return { parentId: parent.id!, index: where === 'before' ? index : index + 1 }
+  }
+
+  /// Containers `id` may move into: every container except the node itself and
+  /// its descendants (parent picker).
+  parentCandidates(id: string): SduiNode[] {
+    const node = find(this._root, id)
+    if (!node || id === this._root.id) return []
+    const out: SduiNode[] = []
+    const walk = (n: SduiNode) => {
+      if (n.id === id) return
+      if (this.factory.info(n.type)?.acceptsChildren) out.push(n)
+      n.children.forEach(walk)
+    }
+    walk(this._root)
+    return out
+  }
+
+  /// Move node `id` into container `parentId` at `index` (default: last).
+  /// Refuses the root, a non-container parent, and a parent inside the moved
+  /// node; returns whether the tree changed.
+  reparent(id: string, parentId: string, index?: number): boolean {
+    const node = find(this._root, id)
+    if (!node || id === this._root.id || !this.isContainer(parentId) || find(node, parentId)) return false
+    const from = parentOf(this._root, id)!
+    const oldIndex = from.children.findIndex((c) => c.id === id)
+    // removing the node first shifts later siblings of the same parent up by one
+    const target = index !== undefined && from.id === parentId && oldIndex < index ? index - 1 : index
+    const before = this._root
+    this.mutate({ root: insertingChild(removing(this._root, id), node, parentId, target) })
+    return this._root !== before
+  }
+
   delete(id: string): void {
     if (id === this._root.id) return
     this.mutate({ root: removing(this._root, id) })

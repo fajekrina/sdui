@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import * as DSL from '../src/builder'
 import {
-  DSLExport, EditorDocument, api, button, findNodeJsonRange, form, list, mountStudio, navigate, native, renderPreview,
+  DSLExport, EditorDocument, api, button, find, findNodeJsonRange, form, list, mountStudio, navigate, native, renderPreview,
   screen, text, textField, toast, vstack
 } from '../src/builder'
 import { ComponentFactory, SduiError, SduiNode, SduiPayload } from '../src/core'
@@ -98,6 +98,35 @@ describe('EditorDocument', () => {
     expect(doc.issues()).toEqual([])
   })
 
+  it('placement and reparent: containers only, never into itself, index-stable within a parent', () => {
+    const doc = new EditorDocument({
+      root: new SduiNode({ id: 'root', type: 'vstack', children: [
+        new SduiNode({ id: 'a', type: 'text', props: { value: 'a' } }),
+        new SduiNode({ id: 'box', type: 'card', children: [new SduiNode({ id: 'inner', type: 'hstack' })] }),
+        new SduiNode({ id: 'b', type: 'text', props: { value: 'b' } })
+      ] })
+    })
+    expect(doc.placement('box', 'inside')).toEqual({ parentId: 'box' })
+    expect(doc.placement('a', 'inside')).toBeUndefined()            // a leaf holds no children
+    expect(doc.placement('b', 'before')).toEqual({ parentId: 'root', index: 2 })
+    expect(doc.placement('root', 'after')).toBeUndefined()          // nothing beside the root
+    expect(doc.parentCandidates('box').map((n) => n.id)).toEqual(['root'])
+    expect(doc.parentCandidates('a').map((n) => n.id)).toEqual(['root', 'box', 'inner'])
+
+    expect(doc.reparent('box', 'inner')).toBe(false)                 // into its own descendant
+    expect(doc.reparent('root', 'box')).toBe(false)
+    expect(doc.reparent('a', 'b')).toBe(false)                       // into a leaf
+    expect(doc.reparent('a', 'inner')).toBe(true)
+    expect(find(doc.root, 'inner')!.children.map((c) => c.id)).toEqual(['a'])
+    // same parent, moving down: the index means "before what is there now"
+    doc.reparent('a', 'root', 0)
+    expect(doc.root.children.map((c) => c.id)).toEqual(['a', 'box', 'b'])
+    doc.reparent('a', 'root', 3)
+    expect(doc.root.children.map((c) => c.id)).toEqual(['box', 'b', 'a'])
+    doc.undo()
+    expect(doc.root.children.map((c) => c.id)).toEqual(['a', 'box', 'b'])
+  })
+
   it('exports DSL', () => {
     const doc = new EditorDocument({ key: 'home', root: new SduiNode({ type: 'vstack', children: [new SduiNode({ type: 'text', props: { value: 'hi' } })] }) })
     expect(doc.exportDSL()).toBe('screen("home", vstack([\n  text("hi"),\n]))')
@@ -145,6 +174,99 @@ describe('Studio (DOM)', () => {
     expect((saved[0] as { screen: { key: string } }).screen.key).toBe('screen')
     studio.destroy()
     expect(host.children).toHaveLength(0)
+  })
+
+  const fire = (target: Element, type: string) => target.dispatchEvent(new Event(type, { bubbles: true, cancelable: true }))
+  const labelled = (host: Element, name: string, scope = '.insp') =>
+    [...host.querySelectorAll(`${scope} label`)].find((l) => l.firstChild?.textContent === name)!
+
+  it('drags from the palette into a container and moves nodes between containers', () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const studio = mountStudio(host)
+    const doc = studio.document
+    const paletteItem = (type: string) => [...host.querySelectorAll('.pal button')].find((b) => b.textContent === type)!
+    expect((paletteItem('card') as HTMLButtonElement).draggable).toBe(true)
+
+    // palette → empty canvas area: lands in the root
+    fire(paletteItem('card'), 'dragstart')
+    fire(host.querySelector('.device')!, 'drop')
+    const card = doc.root.children[0]!
+    expect(card.type).toBe('card')
+    expect(host.querySelector(`[data-sdui-node="${card.id}"] .hint`)!.textContent).toContain('Empty card')
+
+    // palette → onto the card: inserted inside it
+    fire(paletteItem('text'), 'dragstart')
+    fire(host.querySelector(`[data-sdui-node="${card.id}"]`)!, 'drop')
+    expect(find(doc.root, card.id!)!.children[0]!.type).toBe('text')
+    const textId = find(doc.root, card.id!)!.children[0]!.id!
+    expect(host.querySelector(`[data-sdui-node="${textId}"]`)!.getAttribute('data-label')).toBe('text')
+
+    // outline row of the text → onto the root row: moved out of the card
+    fire(host.querySelector(`[data-sdui-row="${textId}"]`)!, 'dragstart')
+    fire(host.querySelector(`[data-sdui-row="${doc.root.id}"]`)!, 'drop')
+    expect(doc.root.children.map((c) => c.type)).toEqual(['card', 'text'])
+    expect(find(doc.root, card.id!)!.children).toHaveLength(0)
+
+    // parent picker moves it back into the card
+    doc.select(textId)
+    const parent = labelled(host, 'parent').querySelector('select')!
+    parent.value = card.id!
+    fire(parent, 'change')
+    expect(find(doc.root, card.id!)!.children.map((c) => c.id)).toEqual([textId])
+    studio.destroy()
+  })
+
+  it('edits actions with a structured editor fed by the app allow-lists', () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const studio = mountStudio(host, { screens: ['home', 'transfer'], requests: ['createTransfer'] })
+    const id = studio.document.add('button')
+    const set = (name: string, value: string, scope?: string) => {
+      const control = labelled(host, name, scope).querySelector('select, input, textarea') as HTMLInputElement
+      control.value = value
+      fire(control, 'change')
+    }
+    set('type', 'navigate')
+    const screenInput = labelled(host, 'screen').querySelector('input')!
+    expect([...host.querySelectorAll(`#${screenInput.getAttribute('list')} option`)].map((o) => o.getAttribute('value'))).toEqual(['home', 'transfer'])
+    set('screen', 'transfer')
+    set('presentation', 'sheet')
+    set('params (JSON)', '{"from":"home"}')
+    expect(studio.document.selected!.action!.toJSON()).toEqual({ type: 'navigate', screen: 'transfer', presentation: 'sheet', params: { from: 'home' } })
+
+    // chain: onSuccess → toast
+    set('type', 'toast', '.insp details > .act')
+    expect(studio.document.selected!.action!.onSuccess!.toJSON()).toEqual({ type: 'toast', message: 'Done', level: 'success' })
+    set('type', '')                                                     // none removes the action
+    expect(find(studio.document.root, id)!.action).toBeUndefined()
+    studio.destroy()
+  })
+
+  it('toggles a full preview and reports save status', async () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    let fail = false
+    const studio = mountStudio(host, { title: 'merchant / home', onSave: () => { if (fail) throw new Error('offline') } })
+    expect(host.querySelector('.tb .ttl')!.textContent).toBe('merchant / home')
+    const previewBtn = [...host.querySelectorAll('.tb button')].find((b) => b.textContent === 'Preview') as HTMLButtonElement
+    previewBtn.click()
+    expect(host.querySelector('.main')!.classList.contains('pv')).toBe(true)
+    expect((host.querySelector('.json') as HTMLElement).style.display).toBe('none')
+    expect(host.querySelector('.device .hint')).toBeNull()               // no editor affordances
+    expect(previewBtn.textContent).toBe('Edit')
+    previewBtn.click()
+    expect(host.querySelector('.main')!.classList.contains('pv')).toBe(false)
+
+    const save = [...host.querySelectorAll('.tb button')].find((b) => b.textContent === 'Save draft') as HTMLButtonElement
+    save.click()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(host.querySelector('.tb .st')!.textContent).toBe('Saved ✔')
+    fail = true
+    save.click()
+    await new Promise((r) => setTimeout(r, 0))
+    expect(host.querySelector('.tb .st.err')!.textContent).toBe('Save failed: offline')
+    studio.destroy()
   })
 
   it('collapses the JSON panel', () => {

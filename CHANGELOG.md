@@ -3,6 +3,28 @@
 Semua perubahan penting paket ini dicatat di sini. Format mengikuti Keep a Changelog;
 versi mengikuti Semantic Versioning (0.x: breaking change boleh di minor dengan catatan jelas).
 
+## [Unreleased]
+
+Studio mengadopsi alur kerja builder 0.3.0 (`FajrinaBuilder`) di atas arsitektur sekarang:
+model `spec/`, 16 komponen builtin, aksi tertutup, target bernama, satu Studio DOM untuk React dan Vue.
+
+### Ditambahkan
+- **Drag-and-drop**: dari palette ke canvas atau outline (sisip), dan node ke posisi lain (pindah);
+  drop `inside` container, atau `before`/`after` sebuah node, dengan penanda drop. Klik palette tetap menyisipkan.
+- **Pemilih parent** di inspector: pindahkan node ke container lain.
+- **Mode Preview**: canvas penuh tanpa palette, inspector, panel JSON, dan penanda editor.
+- **Editor aksi terstruktur**: form per tipe aksi (target, `presentation`, pesan/level `toast`, `params`) dengan rantai
+  `onSuccess`/`onError` bersarang hingga `maxChainDepth`; JSON aksi mentah tetap tersedia.
+- Opsi `StudioOptions` / props `<SduiBuilder>`: `screens`, `requests`, `links`, `commands` (daftar nama dari allow-list
+  aplikasi untuk editor aksi — nama, bukan URL) dan `title` (label toolbar).
+- Status simpan/publish di toolbar (`Saved ✔`, `Published ✔`, `Save failed: …`).
+- Canvas: petunjuk container kosong, label node terpilih, tooltip tipe/id.
+- `EditorDocument`: `isContainer`, `placement`, `parentCandidates`, `reparent`.
+
+### Tidak diadopsi dari 0.3.0 (bertentangan dengan arsitektur)
+- Editor CSS bebas (style `spec/` tertutup), komponen `Modal`/`Toast` (menjadi aksi), isian URL mentah
+  (`href`, `api.url`), dan penyuntingan `parentId`/`order` daftar datar (`spec/` berbentuk pohon).
+
 ## [0.6.1] — 2026-11-11
 
 Menutup catatan lanjutan review 0.5.0.
