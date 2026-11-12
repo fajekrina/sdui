@@ -20,6 +20,8 @@ model `spec/`, 16 komponen builtin, aksi tertutup, target bernama, satu Studio D
 - Status simpan/publish di toolbar (`Saved ✔`, `Published ✔`, `Save failed: …`).
 - Canvas: petunjuk container kosong, label node terpilih, tooltip tipe/id.
 - `EditorDocument`: `isContainer`, `placement`, `parentCandidates`, `reparent`.
+- `MountedStudio.update(options)`: `title`, `screens`/`requests`/`links`/`commands`, `sampleData`, `assetURL` bisa
+  berubah setelah mount (mis. daftar screen dari backend); `<SduiBuilder>` React/Vue meneruskannya otomatis.
 
 ### Tidak diadopsi dari 0.3.0 (bertentangan dengan arsitektur)
 - Editor CSS bebas (style `spec/` tertutup), komponen `Modal`/`Toast` (menjadi aksi), isian URL mentah

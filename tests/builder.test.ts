@@ -243,6 +243,17 @@ describe('Studio (DOM)', () => {
     studio.destroy()
   })
 
+  it('update() applies lists and title that arrive after mounting', () => {
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const studio = mountStudio(host)
+    expect((host.querySelector('.tb .ttl') as HTMLElement).style.display).toBe('none')
+    studio.update({ title: 'demo / home', screens: ['home', 'checkout'] })
+    expect(host.querySelector('.tb .ttl')!.textContent).toBe('demo / home')
+    expect([...host.querySelectorAll('datalist')][0]!.querySelectorAll('option')).toHaveLength(2)
+    studio.destroy()
+  })
+
   it('toggles a full preview and reports save status', async () => {
     const host = document.createElement('div')
     document.body.appendChild(host)

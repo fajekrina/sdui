@@ -1,5 +1,5 @@
 // @fajekrina/sdui/builder/vue — <SduiBuilder /> wraps the DOM Studio.
-import { defineComponent, h, onBeforeUnmount, onMounted, ref, type PropType } from 'vue'
+import { defineComponent, h, onBeforeUnmount, onMounted, ref, watch, type PropType } from 'vue'
 import { mountStudio, type MountedStudio } from './studio'
 import type { EditorDocument } from './document'
 import type { ComponentFactory, SduiValue } from '../core'
@@ -39,6 +39,13 @@ export const SduiBuilder = defineComponent({
         onSave: props.onSave && ((p) => props.onSave?.(p)),
         onPublish: props.onPublish && ((p) => props.onPublish?.(p)),
         onChange: (p) => props.onChange?.(p)
+      })
+    })
+    // options that may arrive or change after mounting (lists loaded from a backend, the title)
+    watch(() => [props.title, props.screens, props.requests, props.links, props.commands, props.sampleData, props.assetURL], () => {
+      studio?.update({
+        title: props.title, screens: props.screens, requests: props.requests, links: props.links,
+        commands: props.commands, sampleData: props.sampleData, assetURL: props.assetURL
       })
     })
     onBeforeUnmount(() => studio?.destroy())

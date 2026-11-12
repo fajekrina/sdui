@@ -9,18 +9,24 @@ export interface SduiBuilderProps extends StudioOptions {
 
 export function SduiBuilder({ className, style, ...options }: SduiBuilderProps) {
   const host = useRef<HTMLDivElement>(null)
+  const studio = useRef<MountedStudio>()
   const optionsRef = useRef(options)
   optionsRef.current = options
   useEffect(() => {
     if (!host.current) return
-    const studio: MountedStudio = mountStudio(host.current, {
+    studio.current = mountStudio(host.current, {
       ...optionsRef.current,
       onSave: optionsRef.current.onSave && ((p) => optionsRef.current.onSave?.(p)),
       onPublish: optionsRef.current.onPublish && ((p) => optionsRef.current.onPublish?.(p)),
       onChange: (p) => optionsRef.current.onChange?.(p)
     })
-    return () => studio.destroy()
+    return () => { studio.current?.destroy(); studio.current = undefined }
   }, [options.document])
+  // options that may arrive or change after mounting (lists loaded from a backend, the title)
+  const { title, screens, requests, links, commands, sampleData, assetURL } = options
+  useEffect(() => {
+    studio.current?.update({ title, screens, requests, links, commands, sampleData, assetURL })
+  }, [title, screens, requests, links, commands, sampleData, assetURL])
   return <div ref={host} className={className} style={{ height: '100%', ...style }} />
 }
 

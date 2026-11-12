@@ -29,8 +29,13 @@ export interface StudioOptions {
   onChange?: (payload: unknown) => void
 }
 
+/// Options that may change after mounting (async lists, a new title, …).
+export type StudioUpdate = Pick<StudioOptions, 'title' | 'screens' | 'requests' | 'links' | 'commands' | 'sampleData' | 'assetURL'>
+
 export interface MountedStudio {
   readonly document: EditorDocument
+  /// apply changed options (e.g. a screen list loaded after mounting) and repaint
+  update(options: StudioUpdate): void
   destroy(): void
 }
 
@@ -146,6 +151,7 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
     return select
   }
 
+  const opts: StudioOptions = { ...options }
   const style = el('style', {}, CSS)
   const root = el('div', { class: 'sdui-studio' })
   target.append(style, root)
@@ -162,9 +168,13 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
   // datalists for the action editor's named targets (one set per Studio)
   const uid = Math.random().toString(36).slice(2, 8)
   const listId = (name: string) => `sdui-${uid}-${name}`
-  for (const name of ['screens', 'requests', 'links', 'commands'] as const) {
-    root.append(el('datalist', { id: listId(name) }, ...(options[name] ?? []).map((v) => el('option', { value: v }))))
+  const LISTS = ['screens', 'requests', 'links', 'commands'] as const
+  const datalists = new Map(LISTS.map((name) => [name, el('datalist', { id: listId(name) })] as const))
+  const fillLists = () => {
+    for (const [name, list] of datalists) list.replaceChildren(...(opts[name] ?? []).map((v) => el('option', { value: v })))
   }
+  root.append(...datalists.values())
+  fillLists()
 
   // toolbar
   const keyInput = el('input', { 'aria-label': 'Screen key', style: 'width:140px;height:28px;border:1px solid #cbd5e1;border-radius:6px;padding:0 6px' }) as HTMLInputElement
@@ -175,6 +185,7 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
   widthSel.addEventListener('change', () => { width = Number(widthSel.value); paint() })
   const previewBtn = button('Preview', () => { previewMode = !previewMode; paint() })
   const statusEl = el('span', { class: 'st', role: 'status' })
+  const titleEl = el('span', { class: 'ttl' })
   const showStatus = (text: string, ok: boolean) => {
     status = { text, ok }
     clearTimeout(statusTimer)
@@ -191,7 +202,7 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
     paint()
   }
   const toolbar = el('div', { class: 'tb' },
-    el('strong', {}, 'SDUI Studio'), ...(options.title ? [el('span', { class: 'ttl' }, options.title)] : []),
+    el('strong', {}, 'SDUI Studio'), titleEl,
     keyInput, undo, redo, widthSel, previewBtn, el('span', { class: 'sp' }), statusEl,
     button('Import', () => {
       const text = globalThis.prompt?.('Paste a spec payload (or a legacy page) JSON')
@@ -478,6 +489,8 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
     keyInput.value = doc.key
     undo.disabled = !doc.canUndo
     redo.disabled = !doc.canRedo
+    titleEl.textContent = opts.title ?? ''
+    titleEl.style.display = opts.title ? '' : 'none'
     previewBtn.textContent = previewMode ? 'Edit' : 'Preview'
     previewBtn.className = previewMode ? 'btn on' : 'btn'
     previewBtn.setAttribute('aria-pressed', String(previewMode))
@@ -498,7 +511,7 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
     }))
     // canvas
     device.style.width = `${width}px`
-    const preview = renderPreview(factory, doc.root, { data: options.sampleData, selected: previewMode ? undefined : doc.selection, assetURL: options.assetURL })
+    const preview = renderPreview(factory, doc.root, { data: opts.sampleData, selected: previewMode ? undefined : doc.selection, assetURL: opts.assetURL })
     device.replaceChildren(...(preview ? [renderNodeDOM(preview, undefined, undefined, d)] : []))
     if (!previewMode) decorate()
     // inspector
@@ -533,6 +546,11 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
 
   return {
     document: doc,
+    update(next) {
+      Object.assign(opts, next)
+      fillLists()
+      paint()
+    },
     destroy() {
       unsubscribe()
       clearTimeout(editTimer)
