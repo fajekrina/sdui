@@ -31,6 +31,8 @@ export function renderNodeDOM(node: RenderNode, screen?: ScreenController, slots
   const el = isSvg ? doc.createElementNS(SVG_NS, node.element) : doc.createElement(node.element)
   for (const [k, v] of Object.entries(node.attrs)) {
     if (k === 'value' && node.element !== 'option') continue
+    // styles go through CSSOM only (strict CSP); event handlers never come from attrs
+    if (k === 'style' || /^on/i.test(k)) continue
     el.setAttribute(k, v === true ? '' : String(v))
   }
   for (const [k, v] of Object.entries(node.style)) (el as HTMLElement).style.setProperty(k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`), v)

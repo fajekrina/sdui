@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import Ajv2020 from 'ajv/dist/2020'
-import { SchemaValidator, SduiEnvelope, SduiPayload } from '../src/core'
+import { SchemaValidator, SduiBounds, SduiEnvelope, SduiPayload } from '../src/core'
 import { ROOT, fixture, fixtureJSON, fixtureNames } from './helpers'
 
 const schema = JSON.parse(readFileSync(resolve(ROOT, 'spec/sdui.schema.json'), 'utf8'))
@@ -42,5 +42,27 @@ describe('client validator vs spec fixtures', () => {
     expect(json).not.toContain('unexpected')
     expect(json).not.toContain('https://')
     expect(json).not.toContain('tablet')
+  })
+})
+
+// F1: one source of bounds — the published spec/bounds.json, the schema, and the client defaults agree
+describe('spec/bounds.json', () => {
+  const bounds = JSON.parse(readFileSync(resolve(ROOT, 'spec/bounds.json'), 'utf8')) as Record<string, unknown>
+  const { $comment: _comment, schemaVersion, ...numbers } = bounds
+  const defs = schema.$defs
+
+  it('is what SduiBounds.default is built from (every field, nothing else)', () => {
+    expect(schemaVersion).toBe('1.1')
+    expect(numbers).toEqual({ ...SduiBounds.default })
+  })
+
+  it('matches every bound the schema also expresses', () => {
+    expect(defs.value.anyOf.find((v: { type: string }) => v.type === 'string').maxLength).toBe(numbers.maxStringLength)
+    expect(defs.value.anyOf.find((v: { type: string }) => v.type === 'array').maxItems).toBe(numbers.maxArrayItems)
+    expect(defs.value.anyOf.find((v: { type: string }) => v.type === 'object').maxProperties).toBe(numbers.maxProps)
+    expect(defs.props.maxProperties).toBe(numbers.maxProps)
+    expect(defs.node.properties.children.maxItems).toBe(numbers.maxChildren)
+    expect(defs.identifier.maxLength).toBe(numbers.maxIdentifierLength)
+    expect(defs.screen.properties.load.maxItems).toBe(numbers.maxLoadRequests)
   })
 })

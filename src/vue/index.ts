@@ -27,6 +27,7 @@ export function renderNodeVNode(node: RenderNode, screen?: ScreenController, slo
   const props: Record<string, unknown> = { key: node.key, style: node.style }
   for (const [k, v] of Object.entries(node.attrs)) {
     if (k === 'value' && node.element !== 'option') continue
+    if (k === 'style' || /^on/i.test(k)) continue   // styles via CSSOM only; no handlers from attrs
     props[k] = v
   }
   if (node.field && screen) {

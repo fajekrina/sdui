@@ -1,0 +1,13 @@
+{
+  "$comment": "Default SduiBounds of @fajekrina/sdui — the single source of the rendering bounds. The client enforces all of them; a backend should reject what exceeds them before publishing. Values shared with sdui.schema.json must match it (gated by tests/spec.test.ts).",
+  "schemaVersion": "1.1",
+  "maxDepth": 32,
+  "maxNodes": 5000,
+  "maxStringLength": 4096,
+  "maxProps": 64,
+  "maxChildren": 256,
+  "maxArrayItems": 512,
+  "maxIdentifierLength": 128,
+  "maxChainDepth": 4,
+  "maxLoadRequests": 8
+}

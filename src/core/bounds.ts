@@ -1,11 +1,21 @@
 /// Rendering bounds — the DoS defense. They cap worst-case decode / validate /
 /// render cost regardless of what an authentic-but-malicious payload asks for.
 ///
-/// Some (string length, prop/child/array counts, identifier length) are also
-/// expressed in `spec/sdui.schema.json`; the client enforces ALL of them because it
-/// cannot trust that the server ran the schema. Depth, total node count, and
-/// action-chain depth, and load-request count are client-only — JSON Schema cannot express recursion
-/// limits.
+/// The defaults come from `spec/bounds.json`, the single source of these numbers:
+/// the bundler inlines them at build time, and a backend reads the same published
+/// file (`@fajekrina/sdui/spec/bounds.json`). `tests/spec.test.ts` fails if the
+/// schema disagrees with it.
+///
+/// Some (string length, prop/child/array counts, identifier length, load-request
+/// count) are also expressed in `spec/sdui.schema.json`; the client enforces ALL of
+/// them because it cannot trust that the server ran the schema. Depth, total node
+/// count and action-chain depth are client-only — JSON Schema cannot express
+/// recursion limits.
+import {
+  maxArrayItems, maxChainDepth, maxChildren, maxDepth, maxIdentifierLength,
+  maxLoadRequests, maxNodes, maxProps, maxStringLength
+} from '../../spec/bounds.json'
+
 export class SduiBounds {
   readonly maxDepth: number
   readonly maxNodes: number
@@ -19,15 +29,15 @@ export class SduiBounds {
   readonly maxLoadRequests: number
 
   constructor(init: Partial<SduiBounds> = {}) {
-    this.maxDepth = init.maxDepth ?? 32
-    this.maxNodes = init.maxNodes ?? 5000
-    this.maxStringLength = init.maxStringLength ?? 4096
-    this.maxProps = init.maxProps ?? 64
-    this.maxChildren = init.maxChildren ?? 256
-    this.maxArrayItems = init.maxArrayItems ?? 512
-    this.maxIdentifierLength = init.maxIdentifierLength ?? 128
-    this.maxChainDepth = init.maxChainDepth ?? 4
-    this.maxLoadRequests = init.maxLoadRequests ?? 8
+    this.maxDepth = init.maxDepth ?? maxDepth
+    this.maxNodes = init.maxNodes ?? maxNodes
+    this.maxStringLength = init.maxStringLength ?? maxStringLength
+    this.maxProps = init.maxProps ?? maxProps
+    this.maxChildren = init.maxChildren ?? maxChildren
+    this.maxArrayItems = init.maxArrayItems ?? maxArrayItems
+    this.maxIdentifierLength = init.maxIdentifierLength ?? maxIdentifierLength
+    this.maxChainDepth = init.maxChainDepth ?? maxChainDepth
+    this.maxLoadRequests = init.maxLoadRequests ?? maxLoadRequests
   }
 
   static readonly default = new SduiBounds()

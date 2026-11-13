@@ -33,7 +33,7 @@ export { createUiStore, type UiStore, type UiState, type UiChange, type ToastSta
 export { ActionDispatcher, type ActionDispatcherInit, type ActionContext, type Command } from './actions/dispatcher'
 
 // Loading, security, cache
-export { ScreenFactory, type ScreenProvider } from './screen-factory'
+export { ScreenFactory, type ScreenFetch, type ScreenProvider, type ScreenProviderOptions, type ScreenProviderResult } from './screen-factory'
 export { PayloadSecurity } from './security'
 export { SduiCache, cacheKey, CacheCoordinator, Manifest, MemoryCacheStore, PassthroughCipher, type CacheStore, type CacheCipher } from './cache'
 

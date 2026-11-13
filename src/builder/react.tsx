@@ -18,15 +18,17 @@ export function SduiBuilder({ className, style, ...options }: SduiBuilderProps) 
       ...optionsRef.current,
       onSave: optionsRef.current.onSave && ((p) => optionsRef.current.onSave?.(p)),
       onPublish: optionsRef.current.onPublish && ((p) => optionsRef.current.onPublish?.(p)),
+      onSubmitForReview: optionsRef.current.onSubmitForReview && ((p, note) => optionsRef.current.onSubmitForReview?.(p, note)),
       onChange: (p) => optionsRef.current.onChange?.(p)
     })
     return () => { studio.current?.destroy(); studio.current = undefined }
   }, [options.document])
-  // options that may arrive or change after mounting (lists loaded from a backend, the title)
-  const { title, screens, requests, links, commands, sampleData, assetURL } = options
+  // options that may arrive or change after mounting (lists, the title, the reviewer
+  // role, a new active release after publishing)
+  const { title, screens, requests, links, commands, catalog, readOnly, baseline, sampleData, assetURL } = options
   useEffect(() => {
-    studio.current?.update({ title, screens, requests, links, commands, sampleData, assetURL })
-  }, [title, screens, requests, links, commands, sampleData, assetURL])
+    studio.current?.update({ title, screens, requests, links, commands, catalog, readOnly, baseline, sampleData, assetURL })
+  }, [title, screens, requests, links, commands, catalog, readOnly, baseline, sampleData, assetURL])
   return <div ref={host} className={className} style={{ height: '100%', ...style }} />
 }
 

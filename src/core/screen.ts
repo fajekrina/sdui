@@ -6,10 +6,10 @@ import { MESSAGES_EN, validateField, type FieldRule } from './patterns'
 import { resolveValue } from './token'
 import { SduiValue, type SduiProps } from './value'
 import { parseJSON } from './payload'
-import { ERROR_TITLES, errorKindOf, type SduiError } from './errors'
+import { ERROR_TITLES, errorKindOf, SduiError } from './errors'
 import { color } from './style'
 import { Symbols } from './components/symbols'
-import { NamedRequest, COMPACT_MAX_WIDTH } from '../ports'
+import { NamedRequest, COMPACT_MAX_WIDTH, type NetworkClient } from '../ports'
 import type { ActionContext, ChainOutcome } from './actions/dispatcher'
 import { sortedJSONStringify } from './bytes'
 import type { ScreenSpec } from './payload'
@@ -66,6 +66,12 @@ export class ScreenController {
     this.unsubscribers.push(this.ui.subscribe(() => this.changed()))
     const viewport = engine.viewport?.subscribe?.(() => this.changed())
     if (viewport) this.unsubscribers.push(viewport)
+    // back online: a screen shown offline (or that failed) reloads; otherwise its data does
+    this.unsubscribers.push(engine.onOnline(() => {
+      const s = this.state
+      if (s.kind === 'failed' || (s.kind === 'loaded' && s.origin === 'offline')) void this.load()
+      else if (s.kind === 'loaded' && s.screen.load.length > 0) void this.runLoads(s.screen.load, this.loadToken)
+    }))
   }
 
   get loadState(): LoadState { return this.state }
@@ -140,6 +146,13 @@ export class ScreenController {
   }
 
   private async runLoads(requests: Array<{ request: string; params?: SduiProps }>, token: number): Promise<void> {
+    if (!this.engine.online()) {
+      // offline: nothing is sent; every request reads as failed until the network is back
+      this.data.merge({ $load: Object.fromEntries(requests.map((r) => [r.request, 'error'])), $offline: true })
+      for (const { request } of requests) this.engine.emit({ type: 'load_request', request, ok: false, ms: 0 })
+      return
+    }
+    this.data.merge({ $offline: false })
     this.pendingLoads += requests.length
     this.data.merge({ $load: Object.fromEntries(requests.map((r) => [r.request, 'pending'])) })
     await Promise.all(requests.map(async ({ request, params }) => {
@@ -288,7 +301,8 @@ export class ScreenController {
       data,
       idempotencyKey,
       outcome,
-      network: dispatcher.network,
+      // offline, `api` fails fast with a network error (→ onError) and sends nothing
+      network: this.engine.online() ? dispatcher.network : OFFLINE_NETWORK,
       navigator: dispatcher.navigator,
       host: dispatcher.host,
       toast: (message, level) => this.ui.showToast(message, level),
@@ -314,6 +328,8 @@ export class ScreenController {
     this.listeners.clear()
   }
 }
+
+const OFFLINE_NETWORK: NetworkClient = { perform: () => Promise.reject(SduiError.network(null)) }
 
 // MARK: - System views
 

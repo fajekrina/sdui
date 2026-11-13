@@ -159,27 +159,30 @@ WebKit on every PR.
 ## Web side, in one call
 
 ```ts
-import { ActionDispatcher, ActionSpec, PayloadSecurity, ScreenFactory, ScreenSource, SduiCache, createEngine, keyedVerifier } from '@fajekrina/sdui'
-import { fetchNetworkClient, indexedDbStore, universalScreenProvider, webCryptoEd25519 } from '@fajekrina/sdui/browser'
+import { ActionDispatcher, ActionSpec, PayloadSecurity, ScreenSource, SduiCache, createEngine, keyedVerifier } from '@fajekrina/sdui'
+import { fetchNetworkClient, indexedDbStore, specManifestLoader, specScreenProvider, webCryptoEd25519 } from '@fajekrina/sdui/browser'
 import { applyTheme, nativeBridgePorts } from '@fajekrina/sdui/bridge'
 import { MESSAGES_ID } from '@fajekrina/sdui/i18n'
 
 const host = nativeBridgePorts()
+const delivery = { basePath: `${baseUrl}/client`, merchantId }   // e.g. baseUrl = 'https://app.example.com/api/universal/v1'
 const engine = createEngine({
   // required: without it every payload is rejected
-  security: PayloadSecurity.signed(keyedVerifier({ k2026: await webCryptoEd25519(PAYLOAD_PUBLIC_KEY) })),
+  // keyId exactly as the backend puts it in envelopes (universal-service: 16 hex chars of sha256(public key))
+  security: PayloadSecurity.signed(keyedVerifier({ [PAYLOAD_KEY_ID]: await webCryptoEd25519(PAYLOAD_PUBLIC_KEY) })),
   messages: MESSAGES_ID,
   assetURL: (name) => `https://cdn.example.com/sdui/${encodeURIComponent(name)}.webp`,
-  screenFactory: new ScreenFactory().registerFallback(universalScreenProvider({ baseUrl, merchantId, getHeaders: host.getHeaders })),
+  screenFactory: specScreenProvider(delivery),   // screens/{mid}/{key}/v{seq} from the manifest version
   actionDispatcher: new ActionDispatcher({
     navigator: host.navigator, host: host.host,
     network: fetchNetworkClient({ baseUrl, endpoints, getHeaders: host.getHeaders })   // token pattern B
   }),
   cache: new SduiCache({ store: indexedDbStore() }),
-  manifestLoader: () => fetch(`${baseUrl}/client/manifest/${merchantId}`).then((r) => r.arrayBuffer()),
+  manifestLoader: specManifestLoader(delivery),
   viewport: host.viewport,
   onEvent: host.onEvent
 })
+await engine.refreshManifest()
 const screen = engine.screen(ScreenSource.key('home'))
 host.onHostEvent('host.back', () => screen.dispatch(new ActionSpec({ type: 'dismiss' })))
 host.onHostEvent('host.theme', (data) => applyTheme(data.colors as Record<string, string>))

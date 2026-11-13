@@ -69,7 +69,7 @@
         "root": { "$ref": "#/$defs/node" },
         "load": {
           "type": "array",
-          "maxItems": 16,
+          "maxItems": 8,
           "description": "v1.1 — named requests run in PARALLEL when the screen opens; each result merges into the data context under its request name. The client bound maxLoadRequests applies.",
           "items": { "$ref": "#/$defs/loadRequest" }
         },

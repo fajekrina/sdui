@@ -14,3 +14,6 @@ export type SduiEvent =
   | { type: 'screen_revalidated'; key: string; changed: boolean; error?: string }
   | { type: 'screen_update_deferred'; key: string }
   | { type: 'bridge_error'; method: string; message: string }
+  | { type: 'connectivity_changed'; online: boolean }
+  | { type: 'screen_not_modified'; key: string; ms: number }
+  | { type: 'envelope_too_large'; bytes: number }

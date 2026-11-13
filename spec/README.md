@@ -43,10 +43,14 @@ vocabulary (unknown types render a Null-Object placeholder); `props` is an open 
 | --- | --- | --- |
 | 1 · Structural decode | client | JSON maps to the model (`type` required, closed action types) |
 | 2 · Schema conformance | CI (Ajv) + client validator + backend on save/publish | shape, closed vocabularies, per-field bounds |
-| 3 · Client-only bounds | client validator | depth, total nodes, chain depth, `load` count |
+| 3 · Client-only bounds | client validator | depth, total nodes, chain depth |
 | 4 · Render fallback | renderer | unknown type → Null Object |
 
 ## Bounds
+
+The defaults are published as [`bounds.json`](./bounds.json) — the single source of these numbers.
+A backend reads that file from the pinned package (`@fajekrina/sdui/spec/bounds.json`) instead of
+copying them. The client builds `SduiBounds.default` from it, and `tests/spec.test.ts` fails if the schema disagrees.
 
 | Bound | Default | Enforced by |
 | --- | --- | --- |
@@ -59,7 +63,7 @@ vocabulary (unknown types render a Null-Object placeholder); `props` is an open 
 | Tree depth | 32 | client |
 | Total nodes | 5000 | client |
 | Action chain (`onSuccess`/`onError`) | 4 | client |
-| `screen.load` requests (`maxLoadRequests`) | 8 | client (schema caps at 16) |
+| `screen.load` requests (`maxLoadRequests`) | 8 | schema + client |
 
 ## Components
 

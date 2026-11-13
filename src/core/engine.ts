@@ -8,11 +8,11 @@ import { PayloadSecurity } from './security'
 import { Manifest } from './cache/manifest'
 import { CacheCoordinator } from './cache/coordinator'
 import { cacheKey, type SduiCache } from './cache'
-import { toBytes, type Bytes, type BytesLike } from './bytes'
+import { toBytes, utf8, utf8String, type Bytes, type BytesLike } from './bytes'
 import { ComponentFactory } from './component-factory'
 import { ScreenFactory } from './screen-factory'
 import { ScreenController } from './screen'
-import { consoleLogger, type Logger, type ViewportPort } from '../ports'
+import { consoleLogger, type ConnectivityPort, type Logger, type ViewportPort } from '../ports'
 import type { SduiEvent } from './events'
 import type { SduiValue } from './value'
 
@@ -79,6 +79,10 @@ export interface EngineInit {
   newId?: () => string
   /// layout width, for `screen.variants`
   viewport?: ViewportPort
+  /// network reachability (default: always online). Offline: last verified layout, no fetch
+  connectivity?: ConnectivityPort
+  /// raw screen/manifest bytes above this are rejected before decode (default 1 MiB)
+  maxEnvelopeBytes?: number
   /// observability hook
   onEvent?: (event: SduiEvent) => void
   logger?: Logger
@@ -100,6 +104,8 @@ export class SduiEngine {
   readonly coordinator?: CacheCoordinator
   readonly assetURL: (name: string) => string
   readonly viewport?: ViewportPort
+  readonly connectivity?: ConnectivityPort
+  readonly maxEnvelopeBytes: number
   readonly logger: Logger
   readonly debug: boolean
   readonly messages: FieldMessages
@@ -110,6 +116,7 @@ export class SduiEngine {
   private manifestRestored?: Promise<void>
   private readonly revalidating = new Map<string, Promise<void>>()
   private readonly revalidatedAt = new Map<string, number>()
+  private readonly onlineListeners = new Set<() => void>()
 
   constructor(init: EngineInit = {}) {
     this.componentFactory = init.componentFactory ?? ComponentFactory.withBuiltins()
@@ -140,6 +147,24 @@ export class SduiEngine {
     this.newId = init.newId ?? randomId
     this.viewport = init.viewport
     this.onEvent = init.onEvent
+    this.maxEnvelopeBytes = init.maxEnvelopeBytes ?? 1_048_576
+    this.connectivity = init.connectivity
+    // back online: newer manifest first, then screens reload their data
+    init.connectivity?.subscribe?.((online) => {
+      this.emit({ type: 'connectivity_changed', online })
+      if (online) void this.refreshManifest().catch(() => undefined).then(() => this.onlineListeners.forEach((l) => l()))
+    })
+  }
+
+  /// Network reachable (the `ConnectivityPort`; always true without one).
+  online(): boolean {
+    return this.connectivity?.online() ?? true
+  }
+
+  /// Called after the network comes back (and the manifest was refreshed).
+  onOnline(listener: () => void): () => void {
+    this.onlineListeners.add(listener)
+    return () => { this.onlineListeners.delete(listener) }
   }
 
   /// Report an observability event (never throws).
@@ -182,9 +207,9 @@ export class SduiEngine {
   /// rejected (anti-rollback) and reported, never applied.
   async refreshManifest(): Promise<void> {
     const cache = this.cache
-    if (!this.coordinator || !this.manifestLoader || !cache) return
+    if (!this.coordinator || !this.manifestLoader || !cache || !this.online()) return
     await this.restoreManifest()
-    const raw = toBytes(await this.manifestLoader())
+    const raw = this.checkSize(toBytes(await this.manifestLoader()))
     const manifest = Manifest.fromJSON(await this.unwrap(raw))   // verify signature
     if (!this.coordinator.apply(manifest)) {
       this.emit({ type: 'rollback_rejected', sequence: manifest.sequence })
@@ -221,9 +246,18 @@ export class SduiEngine {
   /// Verify (per policy) → decode → validate a payload. Used by `load`, and by
   /// tools (the builder) that need the same checks.
   async materialize(rawBytes: Uint8Array): Promise<ScreenSpec> {
-    const payload = SduiPayload.fromJSON(await this.unwrap(rawBytes))
+    const payload = SduiPayload.fromJSON(await this.unwrap(this.checkSize(rawBytes)))
     this.validator.validate(payload)
     return payload.screen
+  }
+
+  /// Reject oversized raw bytes before any decode or signature work.
+  private checkSize(bytes: Bytes): Bytes {
+    if (bytes.length > this.maxEnvelopeBytes) {
+      this.emit({ type: 'envelope_too_large', bytes: bytes.length })
+      throw SduiError.bounds(`envelope exceeds ${this.maxEnvelopeBytes} bytes`)
+    }
+    return bytes
   }
 
   private async loadCached(screenKey: string, cache: SduiCache, coordinator: CacheCoordinator, options: LoadOptions): Promise<{ screen: ScreenSpec; origin: LoadOrigin }> {
@@ -243,42 +277,74 @@ export class SduiEngine {
       const screen = await this.materializeSealed(sealed, cache).catch(() => undefined) // re-verify
       if (screen) {
         coordinator.storeRender(screen, key)
-        coordinator.markGood(screenKey, version)
+        await this.markGood(screenKey, version, cache, coordinator)
         if (known === undefined) this.revalidate(screenKey, key, screen, cache, coordinator, options, 0)
-        return { screen, origin: 'cache' }
+        return { screen, origin: this.online() ? 'cache' : 'offline' }
       }
       await cache.store.remove(key)                                                    // tampered → evict
     }
 
-    // Fetch. A TRANSPORT failure falls back to last-good (re-verified, fail-closed);
-    // a verification/validation failure of fresh bytes surfaces instead of being masked.
-    let raw: Bytes
+    // Offline: never touch the network — the last verified layout, or a network error.
+    // Online, a TRANSPORT failure falls back to it too; a verification/validation
+    // failure of fresh bytes surfaces instead of being masked.
+    if (!this.online()) {
+      const good = await this.lastGood(screenKey, cache, coordinator)
+      if (good) return good
+      throw SduiError.network(null)
+    }
+    let fetched
     try {
-      raw = await this.screenFactory.data(screenKey, options)
+      fetched = await this.screenFactory.resolve(screenKey, { signal: options.signal, version: known })
     } catch (error) {
-      const good = coordinator.lastGoodVersion(screenKey)
-      if (good !== undefined && isTransport(error)) {
-        const goodKey = cacheKey(screenKey, good)
-        const goodSealed = await cache.store.data(goodKey)
-        if (goodSealed) {
-          const screen = await this.materializeSealed(goodSealed, cache).catch(() => undefined)
-          if (screen) {
-            coordinator.storeRender(screen, goodKey)
-            return { screen, origin: 'offline' }
-          }
-        }
-      }
+      const good = isTransport(error) ? await this.lastGood(screenKey, cache, coordinator) : undefined
+      if (good) return good
       throw error
     }
+    const raw = (fetched as { bytes: Bytes }).bytes
     const screen = await this.materialize(raw)                 // fresh bytes verified + validated
     const sealedFresh = await Promise.resolve().then(() => cache.cipher.seal(raw)).catch(() => undefined)
     if (sealedFresh) {                                         // persist + advertise last-good only if sealed
       await cache.store.store(sealedFresh, key)
-      coordinator.markGood(screenKey, version)
+      await this.storeETag(cache, key, (fetched as { etag?: string }).etag)
+      await this.markGood(screenKey, version, cache, coordinator)
     }
     coordinator.storeRender(screen, key)
     this.revalidatedAt.set(screenKey, Date.now())             // fresh: no background re-check needed now
     return { screen, origin: 'network' }
+  }
+
+  /// Remember `version` as the last verified one for `screenKey` — in memory and as a
+  /// sealed pointer in the store, so offline reading survives a restart. The bytes it
+  /// points to are re-verified whenever they are used.
+  private async markGood(screenKey: string, version: string, cache: SduiCache, coordinator: CacheCoordinator): Promise<void> {
+    if (coordinator.lastGoodVersion(screenKey) === version) return
+    coordinator.markGood(screenKey, version)
+    const sealed = await Promise.resolve().then(() => cache.cipher.seal(utf8(version))).catch(() => undefined)
+    if (sealed) await cache.store.store(sealed, LAST_GOOD_PREFIX + screenKey)
+  }
+
+  /// The last verified layout of `screenKey` (memory pointer, else the persisted one), re-verified.
+  private async lastGood(screenKey: string, cache: SduiCache, coordinator: CacheCoordinator): Promise<{ screen: ScreenSpec; origin: LoadOrigin } | undefined> {
+    let good = coordinator.lastGoodVersion(screenKey)
+    if (good === undefined) {
+      const pointer = await cache.store.data(LAST_GOOD_PREFIX + screenKey)
+      good = pointer ? await Promise.resolve().then(async () => utf8String(await cache.cipher.open(pointer))).catch(() => undefined) : undefined
+    }
+    if (good === undefined) return undefined
+    const goodKey = cacheKey(screenKey, good)
+    const goodSealed = await cache.store.data(goodKey)
+    const screen = goodSealed ? await this.materializeSealed(goodSealed, cache).catch(() => undefined) : undefined
+    if (!screen) return undefined
+    coordinator.storeRender(screen, goodKey)
+    coordinator.markGood(screenKey, good)
+    return { screen, origin: 'offline' }
+  }
+
+  /// The ETag travels with the cache entry (a revalidation hint only: a wrong one at
+  /// worst keeps an already verified screen).
+  private async storeETag(cache: SduiCache, key: string, etag: string | undefined): Promise<void> {
+    if (etag) await cache.store.store(utf8(etag), ETAG_PREFIX + key)
+    else await cache.store.remove(ETAG_PREFIX + key)
   }
 
   /// Background re-fetch of an unversioned cached screen (stale-while-revalidate).
@@ -286,18 +352,28 @@ export class SduiEngine {
   /// failures leave the cached screen in place. One in flight per key.
   private revalidate(screenKey: string, key: string, current: ScreenSpec, cache: SduiCache, coordinator: CacheCoordinator, options: LoadOptions, minIntervalMs: number): void {
     const last = this.revalidatedAt.get(screenKey) ?? 0
-    if (this.revalidating.has(screenKey) || (minIntervalMs > 0 && Date.now() - last < minIntervalMs)) return
+    if (!this.online() || this.revalidating.has(screenKey) || (minIntervalMs > 0 && Date.now() - last < minIntervalMs)) return
     this.revalidatedAt.set(screenKey, Date.now())
     const job = (async () => {
       try {
-        const raw = await this.screenFactory.data(screenKey, { signal: options.signal })
+        const started = Date.now()
+        const stored = await cache.store.data(ETAG_PREFIX + key)
+        const fetched = await this.screenFactory.resolve(screenKey, { signal: options.signal, etag: stored ? utf8String(stored) : undefined })
+        if ('notModified' in fetched) {                     // 304: no download, no decode, no re-render
+          this.emit({ type: 'screen_not_modified', key: screenKey, ms: Date.now() - started })
+          return
+        }
+        const raw = fetched.bytes
         const screen = await this.materialize(raw)
         if (JSON.stringify(canonical(screen.toJSON())) === JSON.stringify(canonical(current.toJSON()))) {
           this.emit({ type: 'screen_revalidated', key: screenKey, changed: false })
           return
         }
         const sealed = await Promise.resolve().then(() => cache.cipher.seal(raw)).catch(() => undefined)
-        if (sealed) await cache.store.store(sealed, key)
+        if (sealed) {
+          await cache.store.store(sealed, key)
+          await this.storeETag(cache, key, fetched.etag)
+        }
         coordinator.storeRender(screen, key)
         this.emit({ type: 'screen_revalidated', key: screenKey, changed: true })
         options.onUpdate?.(screen)
@@ -362,6 +438,8 @@ export interface LoadOptions {
 }
 
 const MANIFEST_KEY = 'sdui:manifest'
+const LAST_GOOD_PREFIX = 'sdui:lastgood:'
+const ETAG_PREFIX = 'sdui:etag:'
 /// memory hits of unversioned screens re-check the backend at most this often
 const REVALIDATE_MEMORY_MS = 30_000
 

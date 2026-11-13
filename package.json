@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/fajekrina/sdui"
+    "url": "git+https://github.com/fajekrina/sdui.git"
   },
   "bugs": {
     "url": "https://github.com/fajekrina/sdui/issues"
@@ -22,61 +22,128 @@
   },
   "exports": {
     ".": {
-      "types": "./dist/core/index.d.ts",
-      "import": "./dist/core/index.js",
-      "require": "./dist/core/index.cjs"
+      "import": {
+        "types": "./dist/core/index.d.ts",
+        "default": "./dist/core/index.js"
+      },
+      "require": {
+        "types": "./dist/core/index.d.cts",
+        "default": "./dist/core/index.cjs"
+      }
     },
     "./browser": {
-      "types": "./dist/browser/index.d.ts",
-      "import": "./dist/browser/index.js",
-      "require": "./dist/browser/index.cjs"
+      "import": {
+        "types": "./dist/browser/index.d.ts",
+        "default": "./dist/browser/index.js"
+      },
+      "require": {
+        "types": "./dist/browser/index.d.cts",
+        "default": "./dist/browser/index.cjs"
+      }
     },
     "./bridge": {
-      "types": "./dist/bridge/index.d.ts",
-      "import": "./dist/bridge/index.js",
-      "require": "./dist/bridge/index.cjs"
+      "import": {
+        "types": "./dist/bridge/index.d.ts",
+        "default": "./dist/bridge/index.js"
+      },
+      "require": {
+        "types": "./dist/bridge/index.d.cts",
+        "default": "./dist/bridge/index.cjs"
+      }
     },
     "./compat": {
-      "types": "./dist/compat/index.d.ts",
-      "import": "./dist/compat/index.js",
-      "require": "./dist/compat/index.cjs"
+      "import": {
+        "types": "./dist/compat/index.d.ts",
+        "default": "./dist/compat/index.js"
+      },
+      "require": {
+        "types": "./dist/compat/index.d.cts",
+        "default": "./dist/compat/index.cjs"
+      }
     },
     "./i18n": {
-      "types": "./dist/i18n/index.d.ts",
-      "import": "./dist/i18n/index.js",
-      "require": "./dist/i18n/index.cjs"
+      "import": {
+        "types": "./dist/i18n/index.d.ts",
+        "default": "./dist/i18n/index.js"
+      },
+      "require": {
+        "types": "./dist/i18n/index.d.cts",
+        "default": "./dist/i18n/index.cjs"
+      }
+    },
+    "./pwa": {
+      "import": {
+        "types": "./dist/pwa/index.d.ts",
+        "default": "./dist/pwa/index.js"
+      },
+      "require": {
+        "types": "./dist/pwa/index.d.cts",
+        "default": "./dist/pwa/index.cjs"
+      }
     },
     "./react": {
-      "types": "./dist/react/index.d.ts",
-      "import": "./dist/react/index.js",
-      "require": "./dist/react/index.cjs"
+      "import": {
+        "types": "./dist/react/index.d.ts",
+        "default": "./dist/react/index.js"
+      },
+      "require": {
+        "types": "./dist/react/index.d.cts",
+        "default": "./dist/react/index.cjs"
+      }
     },
     "./vue": {
-      "types": "./dist/vue/index.d.ts",
-      "import": "./dist/vue/index.js",
-      "require": "./dist/vue/index.cjs"
+      "import": {
+        "types": "./dist/vue/index.d.ts",
+        "default": "./dist/vue/index.js"
+      },
+      "require": {
+        "types": "./dist/vue/index.d.cts",
+        "default": "./dist/vue/index.cjs"
+      }
     },
     "./vanilla": {
-      "types": "./dist/vanilla/index.d.ts",
-      "import": "./dist/vanilla/index.js",
-      "require": "./dist/vanilla/index.cjs"
+      "import": {
+        "types": "./dist/vanilla/index.d.ts",
+        "default": "./dist/vanilla/index.js"
+      },
+      "require": {
+        "types": "./dist/vanilla/index.d.cts",
+        "default": "./dist/vanilla/index.cjs"
+      }
     },
     "./builder": {
-      "types": "./dist/builder/index.d.ts",
-      "import": "./dist/builder/index.js",
-      "require": "./dist/builder/index.cjs"
+      "import": {
+        "types": "./dist/builder/index.d.ts",
+        "default": "./dist/builder/index.js"
+      },
+      "require": {
+        "types": "./dist/builder/index.d.cts",
+        "default": "./dist/builder/index.cjs"
+      }
     },
     "./builder/react": {
-      "types": "./dist/builder/react.d.ts",
-      "import": "./dist/builder/react.js",
-      "require": "./dist/builder/react.cjs"
+      "import": {
+        "types": "./dist/builder/react.d.ts",
+        "default": "./dist/builder/react.js"
+      },
+      "require": {
+        "types": "./dist/builder/react.d.cts",
+        "default": "./dist/builder/react.cjs"
+      }
     },
     "./builder/vue": {
-      "types": "./dist/builder/vue.d.ts",
-      "import": "./dist/builder/vue.js",
-      "require": "./dist/builder/vue.cjs"
+      "import": {
+        "types": "./dist/builder/vue.d.ts",
+        "default": "./dist/builder/vue.js"
+      },
+      "require": {
+        "types": "./dist/builder/vue.d.cts",
+        "default": "./dist/builder/vue.cjs"
+      }
     },
-    "./spec/sdui.schema.json": "./spec/sdui.schema.json"
+    "./builder/studio.css": "./dist/builder/studio.css",
+    "./spec/*": "./spec/*",
+    "./package.json": "./package.json"
   },
   "main": "./dist/core/index.cjs",
   "module": "./dist/core/index.js",
@@ -101,7 +168,7 @@
     "webview"
   ],
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && node scripts/dts-formats.mjs && node scripts/studio-css.mjs",
     "prepare": "npm run build",
     "dev": "vite build --watch",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.tests.json",
@@ -110,7 +177,9 @@
     "lint:spec": "vitest run tests/spec.test.ts",
     "size": "node scripts/size.mjs",
     "sign-bundle": "node scripts/sign-bundle.mjs",
-    "conformance": "playwright test"
+    "conformance": "playwright test",
+    "test:contract": "vitest run tests/contract.e2e.test.ts",
+    "check:package": "node scripts/check-package.mjs"
   },
   "peerDependencies": {
     "react": "^18 || ^19",

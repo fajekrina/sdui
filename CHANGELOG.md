@@ -23,6 +23,75 @@ model `spec/`, 16 komponen builtin, aksi tertutup, target bernama, satu Studio D
 - `MountedStudio.update(options)`: `title`, `screens`/`requests`/`links`/`commands`, `sampleData`, `assetURL` bisa
   berubah setelah mount (mis. daftar screen dari backend); `<SduiBuilder>` React/Vue meneruskannya otomatis.
 
+### Ditambahkan — HLD Target F1 (kontrak & integrasi)
+- `./browser`: **`specScreenProvider({ basePath, merchantId, credentials?, traceHeaders? })`** — `ScreenFactory` untuk spec
+  screen: `GET {basePath}/screens/{mid}/{key}/{version}` bila manifest menyebut versi (immutable, bisa di-cache CDN),
+  selain itu `GET {basePath}/screens/{mid}/{key}`. Versi yang bukan satu segmen path ditolak (`schema`); 404 →
+  `unknownScreen`; `credentials` default `same-origin`, hanya `omit`/`same-origin`.
+- `./browser`: **`specManifestLoader({ basePath, merchantId })`** — `GET {basePath}/manifest/{mid}` untuk `manifestLoader`.
+- Core: provider menerima `version` (versi dari manifest yang diterapkan) — `ScreenProviderOptions`; aditif.
+- **`spec/bounds.json`** — sumber tunggal default `SduiBounds`: core mengimpornya dan bundler menanam angkanya saat
+  build (tidak ada angka literal lagi di `bounds.ts`); backend membaca berkas terbit yang sama. Gerbang
+  `tests/spec.test.ts` gagal bila schema berbeda dengan `bounds.json`.
+- `exports`: `./spec/*` (schema, `bounds.json`, `fixtures/**`) dan `./package.json`.
+- `npm run test:contract` — uji kontrak terhadap universal-service asli dalam mode `signed`
+  (`SDUI_E2E_BASE_URL=…/universal/v1`): manifest bertanda tangan → layar berversi, publish fixture → versi baru,
+  envelope yang diubah ditolak.
+
+### Ditambahkan — HLD Target F2 (revalidasi & BFF)
+- Kontrak provider: `ScreenProviderOptions.etag`; provider boleh membalas `{ bytes, etag }` atau — hanya bila diberi
+  `etag` — `{ notModified: true }` (`ScreenProviderResult`, `ScreenFactory.resolve`). ETag disimpan bersama entri cache;
+  revalidasi layar tanpa versi mengirim `If-None-Match`, `304` → event `screen_not_modified`, tanpa unduh/decode/render.
+- `specScreenProvider`: `If-None-Match` / `304` / header `ETag`.
+- `fetchNetworkClient`: `credentials` (`omit` default, `same-origin` untuk sesi BFF; `include` ditolak) dan `traceHeaders`.
+- `EngineInit.maxEnvelopeBytes` (default 1 MiB): bytes layar/manifest yang lebih besar ditolak sebelum decode
+  (`SduiError.bounds`, event `envelope_too_large`).
+
+### Ditambahkan — HLD Target F3 (PWA & offline)
+- Port **`ConnectivityPort`** (`EngineInit.connectivity`, default selalu online). Offline: engine tidak menyentuh jaringan,
+  memakai layout terverifikasi terakhir (`origin: 'offline'`) atau gagal `SduiError.network`; `api` gagal cepat ke
+  `onError` tanpa request; `screen.load` tidak dijalankan (`$load.<request> = "error"`, `$offline`). Kembali online:
+  `refreshManifest()` lalu layar memuat ulang datanya; event `connectivity_changed`.
+- **Last-good dipersist**: penunjuk tersegel per key (`sdui:lastgood:<key>`) di `CacheStore`, hanya diperbarui setelah
+  verifikasi + validasi sukses; bytes yang ditunjuk diverifikasi ulang saat dipakai (L-2).
+- Entry baru **`./pwa`**: `connectivity({ probeUrl?, intervalMs? })` dan `onServiceWorkerUpdate({ canApply, onAvailable })`
+  (alur "versi baru tersedia" yang menunggu `canApply()`, mis. tanpa `hasPendingUpdate`). Budget 1 KB (terukur 0,7 KB).
+
+### Ditambahkan — HLD Target F4 (CSP ketat)
+- Studio tanpa `<style>` inline: stylesheet dipasang sebagai constructable stylesheet (`adoptedStyleSheets`, juga di
+  shadow root) dan dilepas saat `destroy()`; opsi `stylesheet: 'external'` + berkas terbit
+  `@fajekrina/sdui/builder/studio.css`. Atribut `style` di Studio diganti kelas / CSSOM.
+- Renderer vanilla, React, dan Vue mengabaikan `attrs.style` dan `on*` (style hanya lewat CSSOM).
+- Gerbang `tests/csp.test.tsx`: tidak ada sink Trusted Types (`innerHTML`, `insertAdjacentHTML`, `eval`, …), string
+  style inline, atau `setAttribute('style')` di seluruh `src/`; uji runtime ketiga renderer + Studio.
+- Konformans: halaman `conformance/csp.html` (CSP ketat + Trusted Types) dan `csp.spec.ts`; Firefox ditambahkan
+  (`CONFORMANCE_PAIR=chromium,firefox`). CI menjalankan keduanya.
+
+### Ditambahkan — HLD Target F5 (Studio untuk review)
+- `StudioOptions`/`<SduiBuilder>`: **`readOnly`** (peran reviewer), **`onSubmitForReview(payload, note)`**,
+  **`baseline`** (payload release aktif → panel perubahan langsung), **`catalog`** (`screens`, `requests`, `links`,
+  `commands`, `assets` — aset ditawarkan di `image.name`). `readOnly`, `baseline`, `catalog` bisa diubah via `update()`.
+- `diff(base, next)` di `./builder`: perubahan per node (`#id` atau `parent/type[n]`) — prop, aksi, tipe, tambah/hapus,
+  pindah — dan level screen (`key`, `load`, `variants`).
+
+### Diubah — kemasan (HLD Target §1.3 / §3.2)
+- `exports`: kondisi `import`/`require` bersarang dengan deklarasi masing-masing — `.d.ts` (ESM, specifier `.js`) dan
+  `.d.cts` (CJS, specifier `.cjs`) dari `scripts/dts-formats.mjs`. Sebelumnya konsumen CJS mendapat tipe ESM.
+- `npm run check:package`: tarball hasil `npm pack` di-typecheck sebagai konsumen `.cts` dan `.mts` (node16,
+  `skipLibCheck` mati); CI juga menjalankan `publint --strict` (bersih).
+- `repository.url` dalam format `git+https`.
+
+### Diubah
+- Schema: `screen.load` `maxItems` 16 → 8, sama dengan klien (penyempitan; klien sudah menolak > 8).
+- `tests/bounds.test.ts`: untuk setiap angka di `spec/bounds.json`, payload tepat di batas (diterima) dan satu di atasnya
+  (ditolak klien; ditolak schema bila schema bisa menyatakannya) dibangkitkan saat tes, tidak di-commit sebagai fixture,
+  agar `spec/` yang terbit tetap kecil. Bound baru tanpa generator membuat tes gagal.
+- Contoh README dan `HOST-BRIDGE.md` memakai `specScreenProvider`/`specManifestLoader` dan `keyedVerifier` dengan
+  `keyId` seperti yang dikirim backend.
+
+### Deprecated
+- `universalScreenProvider` (kanal halaman A1) → `specScreenProvider`. Dihapus satu minor setelah aplikasi produksi berpindah.
+
 ### Tidak diadopsi dari 0.3.0 (bertentangan dengan arsitektur)
 - Editor CSS bebas (style `spec/` tertutup), komponen `Modal`/`Toast` (menjadi aksi), isian URL mentah
   (`href`, `api.url`), dan penyuntingan `parentId`/`order` daftar datar (`spec/` berbentuk pohon).

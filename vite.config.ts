@@ -26,6 +26,7 @@ export default defineConfig({
         'bridge/index': resolve(__dirname, 'src/bridge/index.ts'),
         'compat/index': resolve(__dirname, 'src/compat/index.ts'),
         'i18n/index': resolve(__dirname, 'src/i18n/index.ts'),
+        'pwa/index': resolve(__dirname, 'src/pwa/index.ts'),
         'builder/vue': resolve(__dirname, 'src/builder/vue.ts')
       },
       formats: ['es', 'cjs'],

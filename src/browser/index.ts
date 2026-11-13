@@ -2,6 +2,7 @@
 // module (with ./bridge) that touches window, fetch, WebCrypto and IndexedDB.
 
 import { SduiError } from '../core/errors'
+import { ScreenFactory, type ScreenProviderResult } from '../core/screen-factory'
 import { concatBytes, toBytes, type Bytes, type BytesLike } from '../core/bytes'
 import type { SduiProps, SduiValue } from '../core/value'
 import type {
@@ -25,6 +26,11 @@ export interface FetchClientOptions {
   /// fetched from the host (bridge) and kept only in memory. `refresh: true`
   /// after a 401, so an expired token is replaced once and the request retried.
   getHeaders?: (options: { refresh: boolean }) => Promise<Record<string, string>> | Record<string, string>
+  /// `omit` (default; bearer tokens from `getHeaders`) or `same-origin` (a BFF session
+  /// cookie; pair it with an `X-CSRF-Token` from `getHeaders`). `include` is never used.
+  credentials?: 'omit' | 'same-origin'
+  /// e.g. `() => ({ traceparent })` — joins the browser trace to the backend
+  traceHeaders?: () => Record<string, string>
   fetchImpl?: typeof fetch
 }
 
@@ -33,17 +39,18 @@ export interface FetchClientOptions {
 export function fetchNetworkClient(options: FetchClientOptions): NetworkClient {
   const base = options.baseUrl.replace(/\/$/, '')
   const doFetch = options.fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init))
+  const credentials = checkCredentials(options.credentials ?? 'omit')
   return {
     async perform(request: NamedRequest, params: SduiProps, opts = {}): Promise<Bytes> {
       const endpoint = options.endpoints[request.rawValue]
       if (!endpoint) throw SduiError.unknownRequest(request.rawValue)
       const { url, body } = buildRequest(base, endpoint, params)
       const send = async (refresh: boolean) => {
-        const headers: Record<string, string> = { Accept: 'application/json', ...(await options.getHeaders?.({ refresh }) ?? {}) }
+        const headers: Record<string, string> = { Accept: 'application/json', ...(options.traceHeaders?.() ?? {}), ...(await options.getHeaders?.({ refresh }) ?? {}) }
         if (body !== undefined) headers['Content-Type'] = 'application/json'
         // one key per user tap + request: a retried or doubled submit is dropped server-side
         if (opts.idempotencyKey && endpoint.method !== 'GET') headers['Idempotency-Key'] = opts.idempotencyKey
-        return doFetch(url, { method: endpoint.method, headers, body, signal: opts.signal, credentials: 'omit' })
+        return doFetch(url, { method: endpoint.method, headers, body, signal: opts.signal, credentials })
       }
       let response: Response
       try {
@@ -95,6 +102,7 @@ function httpError(status: number, bytes: Uint8Array): SduiError {
 
 /// A screen provider for universal-service: `GET {baseUrl}/client/page/{merchantId}/{key}`.
 /// Use with `screenFactory.registerFallback(...)`.
+/// @deprecated Serves the A1 page channel. Use `specScreenProvider` (spec screens, versioned URLs).
 export function universalScreenProvider(options: { baseUrl: string; merchantId: string; signed?: boolean; getHeaders?: FetchClientOptions['getHeaders']; fetchImpl?: typeof fetch }) {
   const base = options.baseUrl.replace(/\/$/, '')
   const doFetch = options.fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init))
@@ -111,6 +119,81 @@ export function universalScreenProvider(options: { baseUrl: string; merchantId: 
     if (!response.ok) throw httpError(response.status, bytes)
     return bytes
   }
+}
+
+// MARK: - Spec screen delivery
+
+export interface SpecDeliveryOptions {
+  /// root of the client API, e.g. `/sdui` or `/api/universal/v1/client` (same-origin path or absolute URL)
+  basePath: string
+  merchantId: string
+  /// default `same-origin` (CDN or BFF on the app's origin); `include` is never used
+  credentials?: 'omit' | 'same-origin'
+  /// e.g. `() => ({ traceparent })` — joins the browser trace to the backend
+  traceHeaders?: () => Record<string, string>
+  fetchImpl?: typeof fetch
+}
+
+// a manifest version becomes ONE path segment: anything else fails closed
+const VERSION_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
+
+/// The screen factory for spec screens: every key resolves through
+/// `GET {basePath}/screens/{merchantId}/{key}/{version}` when the applied manifest names a
+/// version (immutable, CDN-cacheable forever), else `GET {basePath}/screens/{merchantId}/{key}`
+/// (latest; revalidated). Responses are passed to the engine as-is, so in `signed` mode
+/// they must be envelopes. 404 → `unknownScreen`.
+export function specScreenProvider(options: SpecDeliveryOptions): ScreenFactory {
+  const get = deliveryGet(options)
+  const root = `/screens/${encodeURIComponent(options.merchantId)}`
+  return new ScreenFactory().registerFallback(async (key, opts): Promise<ScreenProviderResult> => {
+    let path = `${root}/${encodeURIComponent(key)}`
+    if (opts.version !== undefined) {
+      if (!VERSION_SEGMENT.test(opts.version)) throw SduiError.schema(`manifest version "${opts.version}" is not a valid path segment`)
+      path += `/${opts.version}`
+    }
+    // unversioned revalidation: If-None-Match → 304 keeps the cached screen
+    const response = await get(path, opts.signal, opts.etag)
+    if (response.status === 304) return { notModified: true }
+    if (response.status === 404) throw SduiError.unknownScreen(key)
+    return { bytes: response.bytes, etag: response.etag }
+  })
+}
+
+/// The manifest loader for `createEngine({ manifestLoader })`: `GET {basePath}/manifest/{merchantId}`.
+/// The engine verifies the (signed) manifest and rejects an older `sequence`.
+export function specManifestLoader(options: SpecDeliveryOptions): () => Promise<Bytes> {
+  const get = deliveryGet(options)
+  const path = `/manifest/${encodeURIComponent(options.merchantId)}`
+  return async () => {
+    const response = await get(path)
+    if (response.status === 404) throw httpError(404, response.bytes)
+    return response.bytes
+  }
+}
+
+function deliveryGet(options: SpecDeliveryOptions) {
+  const base = options.basePath.replace(/\/$/, '')
+  const doFetch = options.fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init))
+  const credentials = checkCredentials(options.credentials ?? 'same-origin')
+  return async (path: string, signal?: AbortSignal, etag?: string): Promise<{ status: number; bytes: Bytes; etag?: string }> => {
+    const headers: Record<string, string> = { Accept: 'application/json', ...(options.traceHeaders?.() ?? {}) }
+    if (etag) headers['If-None-Match'] = etag
+    let response: Response
+    try {
+      response = await doFetch(`${base}${path}`, { headers, credentials, signal })
+    } catch {
+      throw SduiError.network(null)
+    }
+    if (response.status === 304) return { status: 304, bytes: new Uint8Array() }
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    if (!response.ok && response.status !== 404) throw httpError(response.status, bytes)
+    return { status: response.status, bytes, etag: response.headers.get('ETag') ?? undefined }
+  }
+}
+
+function checkCredentials(value: string): 'omit' | 'same-origin' {
+  if (value !== 'omit' && value !== 'same-origin') throw new TypeError(`credentials must be 'omit' or 'same-origin'`)
+  return value
 }
 
 // MARK: - Signature verification (WebCrypto Ed25519)

@@ -19,6 +19,7 @@ export function RenderNodeView({ node, screen, slots }: { node: RenderNode; scre
   const props: Record<string, unknown> = { style: node.style as React.CSSProperties }
   for (const [k, v] of Object.entries(node.attrs)) {
     if (k === 'value' && node.element !== 'option') continue
+    if (k === 'style' || /^on/i.test(k)) continue   // styles via CSSOM only; no handlers from attrs
     props[ATTR_ALIASES[k] ?? k] = v
   }
 

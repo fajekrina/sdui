@@ -8,7 +8,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   test:
-    name: npm ci · typecheck · test · build · size
+    name: npm ci · typecheck · test · build · size · package
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,12 +18,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
-      - run: npm test            # includes the spec gate (Ajv over spec/fixtures) and the core-purity gate
+      - run: npm test            # spec gate (Ajv over spec/fixtures), bounds gate, core purity, CSP gate
       - run: npm run build
       - run: npm run size        # bundle budget
+      # the packed tarball resolves for CJS and ESM consumers (node16, skipLibCheck off)
+      - run: npm run check:package
+      - run: npx -y publint@0.3.12 --strict
 
   conformance:
-    name: Chromium ≡ WebKit (WebView engines)
+    name: Chromium ≡ WebKit, Chromium ≡ Firefox · strict CSP
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,5 +35,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium webkit
-      - run: npm run conformance
+      - run: npx playwright install --with-deps chromium webkit firefox
+      # one bundle, same DOM and layout: WebView engines, then the web (Firefox)
+      - run: npx playwright test conformance.spec.ts
+        env:
+          CONFORMANCE_PAIR: chromium,webkit
+      - run: npx playwright test conformance.spec.ts
+        env:
+          CONFORMANCE_PAIR: chromium,firefox
+      # renderers + Studio under style-src 'self' and Trusted Types: no violation
+      - run: npx playwright test csp.spec.ts

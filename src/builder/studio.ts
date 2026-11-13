@@ -7,10 +7,15 @@ import { renderNodeDOM } from '../vanilla'
 import { EditorDocument } from './document'
 import { find, flatten, isGeneratedId, outlineLabel } from './tree'
 import { findNodeJsonRange, renderPreview } from './preview'
+import { STUDIO_CSS } from './studio-css'
+import { diff, type ScreenChange } from './diff'
 
 export interface StudioOptions {
   document?: EditorDocument
   factory?: ComponentFactory
+  /// `adopt` (default): a constructable stylesheet — no inline `<style>`, so a strict CSP
+  /// (`style-src 'self'`) holds. `external`: the app links `@fajekrina/sdui/builder/studio.css`.
+  stylesheet?: 'adopt' | 'external'
   /// sample data for `{{tokens}}` in the preview
   sampleData?: Record<string, SduiValue>
   assetURL?: (name: string) => string
@@ -23,6 +28,16 @@ export interface StudioOptions {
   commands?: readonly string[]
   /// label shown in the toolbar, e.g. "merchant / home"
   title?: string
+  /// the app's catalog of names: offered by the action editor (screens, requests, links,
+  /// commands) and the image `name` field (assets). An explicit `screens` / … option wins.
+  catalog?: StudioCatalog
+  /// view only (e.g. a reviewer role): no palette, no drag & drop, inspector and JSON
+  /// disabled, no undo / import / save / publish / submit
+  readOnly?: boolean
+  /// the payload of the active release: the Studio lists what the draft changes against it
+  baseline?: unknown
+  /// maker-checker: hand the validated draft and a note to review instead of publishing
+  onSubmitForReview?: (payload: unknown, note: string) => void | Promise<void>
   /// persist the validated payload (JSON object)
   onSave?: (payload: unknown) => void | Promise<void>
   onPublish?: (payload: unknown) => void | Promise<void>
@@ -30,7 +45,16 @@ export interface StudioOptions {
 }
 
 /// Options that may change after mounting (async lists, a new title, …).
-export type StudioUpdate = Pick<StudioOptions, 'title' | 'screens' | 'requests' | 'links' | 'commands' | 'sampleData' | 'assetURL'>
+export type StudioUpdate = Pick<StudioOptions, 'title' | 'screens' | 'requests' | 'links' | 'commands' | 'catalog' | 'readOnly' | 'baseline' | 'sampleData' | 'assetURL'>
+
+export interface StudioCatalog {
+  screens?: readonly string[]
+  requests?: readonly string[]
+  links?: readonly string[]
+  commands?: readonly string[]
+  /// image names the app's `assetURL` maps
+  assets?: readonly string[]
+}
 
 export interface MountedStudio {
   readonly document: EditorDocument
@@ -76,57 +100,7 @@ const STARTERS: Record<string, RawAction> = {
 const MAX_NESTED = 3
 const DRAG_MIME = 'application/x-sdui'
 
-const CSS = `
-.sdui-studio{display:flex;flex-direction:column;height:100%;min-height:560px;font:13px/1.4 system-ui,sans-serif;color:#0f172a;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}
-.sdui-studio *{box-sizing:border-box}
-.sdui-studio button,.sdui-studio select,.sdui-studio input,.sdui-studio textarea{font:inherit}
-.sdui-studio .tb{display:flex;gap:6px;align-items:center;padding:8px;border-bottom:1px solid #e2e8f0;background:#fff;flex-wrap:wrap}
-.sdui-studio .tb .sp{flex:1}
-.sdui-studio .tb .ttl{font-size:12px;color:#64748b}
-.sdui-studio .tb .st{font-size:12px}
-.sdui-studio .tb .st.ok{color:#16a34a}
-.sdui-studio .tb .st.err{color:#dc2626}
-.sdui-studio .btn{height:28px;padding:0 10px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer}
-.sdui-studio .btn:disabled{opacity:.4;cursor:default}
-.sdui-studio .btn.pri{background:#2563eb;border-color:#2563eb;color:#fff}
-.sdui-studio .btn.on{background:#0f172a;border-color:#0f172a;color:#fff}
-.sdui-studio .main{flex:1;display:grid;grid-template-columns:230px 1fr 290px;min-height:0}
-.sdui-studio .main.pv{grid-template-columns:1fr}
-.sdui-studio .main.pv>.col:not(.canvas){display:none}
-.sdui-studio .col{display:flex;flex-direction:column;min-height:0;overflow:auto;border-right:1px solid #e2e8f0;background:#fff}
-.sdui-studio .col h3{margin:0;padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#64748b;border-bottom:1px solid #f1f5f9}
-.sdui-studio .col .tip{padding:4px 10px 0;font-size:11px;color:#94a3b8}
-.sdui-studio .pal{display:flex;flex-wrap:wrap;gap:4px;padding:8px}
-.sdui-studio .pal button{border:1px solid #e2e8f0;background:#f8fafc;border-radius:4px;padding:2px 6px;cursor:grab}
-.sdui-studio .row{display:flex;align-items:center;gap:4px;padding:3px 8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sdui-studio .row.sel{background:#dbeafe}
-.sdui-studio .canvas{background:#f1f5f9;padding:16px;overflow:auto}
-.sdui-studio .device{flex-shrink:0;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);padding:12px;min-height:200px}
-.sdui-studio .device .hint{padding:8px;border:1px dashed #cbd5e1;border-radius:6px;color:#94a3b8;font-size:12px;text-align:center}
-.sdui-studio .device [data-label]{position:relative}
-.sdui-studio .device [data-label]::after{content:attr(data-label);position:absolute;top:-18px;left:0;padding:0 6px;border-radius:4px;background:#2563eb;color:#fff;font:10px/16px system-ui,sans-serif;white-space:nowrap;pointer-events:none;z-index:1}
-.sdui-studio [data-drop="inside"]{box-shadow:inset 0 0 0 2px #22c55e!important}
-.sdui-studio [data-drop="before"]{box-shadow:0 -3px 0 0 #22c55e!important}
-.sdui-studio [data-drop="after"]{box-shadow:0 3px 0 0 #22c55e!important}
-.sdui-studio .insp{padding:8px;display:flex;flex-direction:column;gap:8px}
-.sdui-studio .insp label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:#475569}
-.sdui-studio .insp label.chk{flex-direction:row;align-items:center;gap:6px}
-.sdui-studio .insp input,.sdui-studio .insp select,.sdui-studio .insp textarea{border:1px solid #cbd5e1;border-radius:4px;padding:4px 6px;background:#fff;color:#0f172a}
-.sdui-studio .insp textarea{font-family:ui-monospace,monospace;font-size:11px;min-height:56px}
-.sdui-studio .insp fieldset{border:1px solid #e2e8f0;border-radius:6px;display:flex;flex-direction:column;gap:6px;padding:8px}
-.sdui-studio .insp details{border-left:2px solid #e2e8f0;padding-left:8px}
-.sdui-studio .insp summary{cursor:pointer;font-size:12px;color:#475569}
-.sdui-studio .insp .act{display:flex;flex-direction:column;gap:6px}
-.sdui-studio .insp .acts{display:flex;gap:4px;flex-wrap:wrap}
-.sdui-studio .json{border-top:1px solid #e2e8f0;background:#0f172a;color:#e2e8f0;display:flex;flex-direction:column}
-.sdui-studio .json .hd{display:flex;align-items:center;gap:8px;padding:4px 8px;background:#1e293b}
-.sdui-studio .json .badge{font-size:11px;border:1px solid #60a5fa;border-radius:999px;padding:0 8px;color:#bfdbfe}
-.sdui-studio .json .body{position:relative;height:220px;overflow:hidden}
-.sdui-studio .json textarea{position:absolute;inset:0;width:100%;height:100%;background:transparent;color:#e2e8f0;border:0;padding:8px;font:12px/18px ui-monospace,monospace;white-space:pre;overflow:auto;resize:none;outline:none}
-.sdui-studio .json .band{position:absolute;left:0;right:0;background:rgba(96,165,250,.16);border-left:3px solid #60a5fa;pointer-events:none}
-.sdui-studio .issues{padding:4px 8px;font-size:12px;color:#fca5a5;background:#1e293b}
-.sdui-studio .warn{color:#fcd34d}
-`
+const CSS = STUDIO_CSS
 
 /// Mount the Studio into an element.
 export function mountStudio(target: HTMLElement, options: StudioOptions = {}): MountedStudio {
@@ -152,9 +126,9 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
   }
 
   const opts: StudioOptions = { ...options }
-  const style = el('style', {}, CSS)
+  const detachStyles = attachStyles(target, CSS, opts.stylesheet)
   const root = el('div', { class: 'sdui-studio' })
-  target.append(style, root)
+  target.append(root)
 
   let width = 375
   let jsonOpen = true
@@ -168,16 +142,18 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
   // datalists for the action editor's named targets (one set per Studio)
   const uid = Math.random().toString(36).slice(2, 8)
   const listId = (name: string) => `sdui-${uid}-${name}`
-  const LISTS = ['screens', 'requests', 'links', 'commands'] as const
+  const LISTS = ['screens', 'requests', 'links', 'commands', 'assets'] as const
   const datalists = new Map(LISTS.map((name) => [name, el('datalist', { id: listId(name) })] as const))
+  const namesOf = (name: typeof LISTS[number]): readonly string[] =>
+    (name === 'assets' ? undefined : opts[name]) ?? opts.catalog?.[name] ?? []
   const fillLists = () => {
-    for (const [name, list] of datalists) list.replaceChildren(...(opts[name] ?? []).map((v) => el('option', { value: v })))
+    for (const [name, list] of datalists) list.replaceChildren(...namesOf(name).map((v) => el('option', { value: v })))
   }
   root.append(...datalists.values())
   fillLists()
 
   // toolbar
-  const keyInput = el('input', { 'aria-label': 'Screen key', style: 'width:140px;height:28px;border:1px solid #cbd5e1;border-radius:6px;padding:0 6px' }) as HTMLInputElement
+  const keyInput = el('input', { 'aria-label': 'Screen key', class: 'key' }) as HTMLInputElement
   keyInput.addEventListener('change', () => doc.setKey(keyInput.value.trim()))
   const undo = button('↶ Undo', () => doc.undo())
   const redo = button('↷ Redo', () => doc.redo())
@@ -201,22 +177,39 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
     }
     paint()
   }
+  const importBtn = button('Import', () => {
+    const text = globalThis.prompt?.('Paste a spec payload (or a legacy page) JSON')
+    if (!text) return
+    try { doc.importJSON(text); message = '' } catch (error) { message = String(error instanceof Error ? error.message : error) }
+    paint()
+  })
+  const noteInput = el('input', { 'aria-label': 'Review note', placeholder: 'Note for the reviewer', class: 'note' }) as HTMLInputElement
+  const submit = async () => {
+    try {
+      await opts.onSubmitForReview?.(JSON.parse(doc.exportJSON()), noteInput.value.trim())
+      noteInput.value = ''
+      showStatus('Submitted for review ✔', true)
+    } catch (error) {
+      showStatus(`Submit failed: ${error instanceof Error ? error.message : String(error)}`, false)
+    }
+    paint()
+  }
+  // hidden while read-only
+  const editing: HTMLElement[] = [undo, redo, importBtn,
+    ...(options.onSave ? [button('Save draft', () => void emit(options.onSave, 'Saved ✔', 'Save failed'))] : []),
+    ...(options.onPublish ? [button('Publish', () => void emit(options.onPublish, 'Published ✔', 'Publish failed'), 'btn pri')] : []),
+    ...(options.onSubmitForReview ? [noteInput, button('Submit for review', () => void submit(), 'btn pri')] : [])]
   const toolbar = el('div', { class: 'tb' },
     el('strong', {}, 'SDUI Studio'), titleEl,
     keyInput, undo, redo, widthSel, previewBtn, el('span', { class: 'sp' }), statusEl,
-    button('Import', () => {
-      const text = globalThis.prompt?.('Paste a spec payload (or a legacy page) JSON')
-      if (!text) return
-      try { doc.importJSON(text); message = '' } catch (error) { message = String(error instanceof Error ? error.message : error) }
-      paint()
-    }),
+    importBtn,
     button('Export DSL', () => { void navigator.clipboard?.writeText(doc.exportDSL()); message = 'DSL copied to clipboard'; paint() }),
-    ...(options.onSave ? [button('Save draft', () => void emit(options.onSave, 'Saved ✔', 'Save failed'))] : []),
-    ...(options.onPublish ? [button('Publish', () => void emit(options.onPublish, 'Published ✔', 'Publish failed'), 'btn pri')] : [])
+    ...editing.slice(3)
   )
 
   // drag & drop: palette → canvas/outline (insert), canvas/outline node → elsewhere (move)
   const startDrag = (event: DragEvent, next: Drag) => {
+    if (opts.readOnly) { event.preventDefault(); return }
     drag = next
     try {
       event.dataTransfer?.setData(DRAG_MIME, JSON.stringify(next))
@@ -261,7 +254,7 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
     }
     surface.addEventListener('dragover', (event) => {
       const next = currentDrag(event)
-      const at = next && !previewMode ? resolve(event) : undefined
+      const at = next && !previewMode && !opts.readOnly ? resolve(event) : undefined
       if (!at) return
       const zone = zoneOf(at[0], event, at[1])
       if (!doc.placement(at[1], zone) || (next!.kind === 'node' && next!.id === at[1])) { mark(undefined); return }
@@ -273,7 +266,7 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
     })
     surface.addEventListener('drop', (event) => {
       const next = currentDrag(event)
-      const at = next && !previewMode ? resolve(event) : undefined
+      const at = next && !previewMode && !opts.readOnly ? resolve(event) : undefined
       mark(undefined)
       drag = undefined
       if (!at) return
@@ -308,8 +301,9 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
   device.addEventListener('dragend', endDrag)
   dropSurface(device, 'data-sdui-node', true)
   const inspector = el('div', { class: 'insp' })
+  const paletteBox = el('div', {}, el('h3', {}, 'Components'), el('div', { class: 'tip' }, 'Click to insert, or drag onto the canvas / outline.'), palette)
   const main = el('div', { class: 'main' },
-    el('div', { class: 'col' }, el('h3', {}, 'Components'), el('div', { class: 'tip' }, 'Click to insert, or drag onto the canvas / outline.'), palette, el('h3', {}, 'Outline'), outline),
+    el('div', { class: 'col' }, paletteBox, el('h3', {}, 'Outline'), outline),
     el('div', { class: 'col canvas' }, device),
     el('div', { class: 'col' }, el('h3', {}, 'Inspector'), inspector)
   )
@@ -325,7 +319,9 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
   const toggle = button('▾', () => { jsonOpen = !jsonOpen; paint() })
   toggle.setAttribute('aria-expanded', 'true')
   const issues = el('div', { class: 'issues' })
-  const jsonPanel = el('div', { class: 'json' }, el('div', { class: 'hd' }, toggle, el('span', {}, 'JSON (2-way)'), badge), jsonBody, issues)
+  // review: what the draft changes against the baseline (active release)
+  const changesEl = el('div', { class: 'changes', 'aria-label': 'Changes against the active release' })
+  const jsonPanel = el('div', { class: 'json' }, el('div', { class: 'hd' }, toggle, el('span', {}, 'JSON (2-way)'), badge), jsonBody, issues, changesEl)
   root.append(jsonPanel)
   let editTimer: ReturnType<typeof setTimeout> | undefined
   jsonText.addEventListener('input', () => {
@@ -422,7 +418,7 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
         area.addEventListener('change', () => { try { doc.setProp(id, key, area.value ? JSON.parse(area.value) : undefined) } catch { /* keep editing */ } })
         return el('label', {}, key, area)
       }
-      const input = el('input', { type: kind === 'number' ? 'number' : 'text' }) as HTMLInputElement
+      const input = el('input', { type: kind === 'number' ? 'number' : 'text', ...(node.type === 'image' && key === 'name' ? { list: listId('assets') } : {}) }) as HTMLInputElement
       input.value = current === undefined || current === null ? '' : String(current)
       input.addEventListener('change', () => doc.setProp(id, key, input.value === '' ? undefined : kind === 'number' ? Number(input.value) : input.value))
       return el('label', {}, key, input)
@@ -478,7 +474,7 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
       const id = element.getAttribute('data-sdui-node')!
       const node = nodes.get(id)
       if (!node) continue
-      if (id !== doc.root.id) (element as HTMLElement).draggable = true
+      if (id !== doc.root.id && !opts.readOnly) (element as HTMLElement).draggable = true
       element.setAttribute('title', `${node.type}${isGeneratedId(id) ? '' : ` #${id}`}`)
       if (id === doc.selection) element.setAttribute('data-label', element.getAttribute('title')!)
       if (doc.isContainer(id) && node.children.length === 0) element.append(el('div', { class: 'hint' }, `Empty ${node.type} — drop components here`))
@@ -496,13 +492,20 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
     previewBtn.setAttribute('aria-pressed', String(previewMode))
     main.classList.toggle('pv', previewMode)
     jsonPanel.style.display = previewMode ? 'none' : ''
+    const readOnly = opts.readOnly === true
+    root.classList.toggle('ro', readOnly)
+    for (const control of editing) control.hidden = readOnly
+    paletteBox.hidden = readOnly
+    keyInput.disabled = readOnly
+    jsonText.readOnly = readOnly
     statusEl.textContent = status?.text ?? ''
     statusEl.className = `st${status ? (status.ok ? ' ok' : ' err') : ''}`
     // outline
     outline.replaceChildren(...flatten(doc.root).map(([n, depth]) => {
-      const row = el('div', { class: n.id === doc.selection ? 'row sel' : 'row', style: `padding-left:${8 + depth * 12}px`, role: 'treeitem', 'data-sdui-row': n.id! }, outlineLabel(n))
+      const row = el('div', { class: n.id === doc.selection ? 'row sel' : 'row', role: 'treeitem', 'data-sdui-row': n.id! }, outlineLabel(n))
+      row.style.paddingLeft = `${8 + depth * 12}px`
       row.addEventListener('click', () => doc.select(n.id))
-      if (n.id !== doc.root.id) {
+      if (n.id !== doc.root.id && !readOnly) {
         row.draggable = true
         row.addEventListener('dragstart', (event) => startDrag(event, { kind: 'node', id: n.id! }))
         row.addEventListener('dragend', endDrag)
@@ -517,7 +520,8 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
     // inspector
     const selected = doc.selected
     if (selected) inspectorFor(selected)
-    else inspector.replaceChildren(el('p', { style: 'color:#94a3b8;text-align:center' }, 'Select a node'))
+    else inspector.replaceChildren(el('p', { class: 'empty' }, 'Select a node'))
+    if (readOnly) for (const c of inspector.querySelectorAll('input, select, textarea, button')) (c as HTMLInputElement).disabled = true
     // JSON
     toggle.textContent = jsonOpen ? '▾' : '▸'
     toggle.setAttribute('aria-expanded', String(jsonOpen))
@@ -538,7 +542,20 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
       ...[message, ...problems].filter(Boolean).map((m) => el('div', {}, `⚠ ${m}`)),
       ...doc.importWarnings.map((w) => el('div', { class: 'warn' }, `↳ ${w}`))
     )
-    options.onChange?.(doc.payload().toJSON())
+    const payload = doc.payload().toJSON()
+    paintChanges(opts.baseline === undefined ? undefined : diff(opts.baseline, payload))
+    options.onChange?.(payload)
+  }
+
+  const paintChanges = (changes: ScreenChange[] | undefined) => {
+    changesEl.hidden = changes === undefined
+    if (!changes) return
+    const show = (v: unknown) => { const s = v === undefined ? '∅' : JSON.stringify(v); return s.length > 40 ? `${s.slice(0, 39)}…` : s }
+    changesEl.replaceChildren(
+      el('div', { class: 'hd' }, changes.length ? `${changes.length} change${changes.length === 1 ? '' : 's'} vs. the active release` : 'No changes vs. the active release'),
+      ...changes.map((c) => el('div', { class: c.kind },
+        `${c.kind} · ${c.type ?? 'screen'} ${c.path}${c.field ? ` · ${c.field}` : ''}${c.kind === 'changed' || c.kind === 'moved' ? `: ${show(c.before)} → ${show(c.after)}` : ''}`))
+    )
   }
 
   const unsubscribe = doc.subscribe(paint)
@@ -556,9 +573,29 @@ export function mountStudio(target: HTMLElement, options: StudioOptions = {}): M
       clearTimeout(editTimer)
       clearTimeout(statusTimer)
       root.remove()
-      style.remove()
+      detachStyles()
     }
   }
+}
+
+/// Install the stylesheet without an inline `<style>` (strict CSP): a constructable
+/// stylesheet adopted by the target's document or shadow root. `external`: the app links
+/// `@fajekrina/sdui/builder/studio.css` itself. Engines without constructable stylesheets
+/// (Safari < 16.4) fall back to a `<style>` element, which a strict CSP would block.
+function attachStyles(target: HTMLElement, css: string, mode: StudioOptions['stylesheet'] = 'adopt'): () => void {
+  if (mode === 'external') return () => undefined
+  const scope = target.getRootNode() as Document | ShadowRoot
+  const Sheet = target.ownerDocument.defaultView?.CSSStyleSheet
+  if (Sheet && 'adoptedStyleSheets' in scope && typeof Sheet.prototype.replaceSync === 'function') {
+    const sheet = new Sheet()
+    sheet.replaceSync(css)
+    scope.adoptedStyleSheets = [...scope.adoptedStyleSheets, sheet]
+    return () => { scope.adoptedStyleSheets = scope.adoptedStyleSheets.filter((x) => x !== sheet) }
+  }
+  const style = target.ownerDocument.createElement('style')
+  style.textContent = css
+  target.append(style)
+  return () => style.remove()
 }
 
 export { find }

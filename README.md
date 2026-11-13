@@ -25,7 +25,8 @@ npm install @fajekrina/sdui
 | Import | What |
 | --- | --- |
 | `@fajekrina/sdui` | engine: `createEngine`, `ScreenSource`, `ComponentFactory`, `ScreenFactory`, `ActionDispatcher`, `PayloadSecurity`, `SduiCache`, model, ports |
-| `@fajekrina/sdui/browser` | `fetchNetworkClient`, `universalScreenProvider`, `webCryptoEd25519`, `indexedDbStore`, `aesGcmCipher`, `browserNavigator`, `windowViewport`, `browserPorts` |
+| `@fajekrina/sdui/pwa` | `connectivity`, `onServiceWorkerUpdate` |
+| `@fajekrina/sdui/browser` | `specScreenProvider`, `specManifestLoader`, `fetchNetworkClient`, `webCryptoEd25519`, `indexedDbStore`, `aesGcmCipher`, `browserNavigator`, `windowViewport`, `browserPorts` |
 | `@fajekrina/sdui/bridge` | `nativeBridgePorts`, `detectHost`, `applyTheme`, `verifyBundleManifest` — see [HOST-BRIDGE.md](HOST-BRIDGE.md) |
 | `@fajekrina/sdui/react` · `/vue` | `<SduiScreen engine source />` |
 | `@fajekrina/sdui/vanilla` | `mount(el, { engine, source })` |
@@ -36,13 +37,16 @@ npm install @fajekrina/sdui
 ## Quickstart (browser)
 
 ```ts
-import { ActionDispatcher, PayloadSecurity, ScreenFactory, SduiCache, createEngine } from '@fajekrina/sdui'
+import { ActionDispatcher, PayloadSecurity, SduiCache, createEngine, keyedVerifier } from '@fajekrina/sdui'
 import { MESSAGES_ID } from '@fajekrina/sdui/i18n'
-import { browserNavigator, fetchNetworkClient, indexedDbStore, universalScreenProvider, webCryptoEd25519, windowViewport } from '@fajekrina/sdui/browser'
+import { browserNavigator, fetchNetworkClient, indexedDbStore, specManifestLoader, specScreenProvider, webCryptoEd25519, windowViewport } from '@fajekrina/sdui/browser'
+
+// spec screens + version manifest: GET {basePath}/manifest/{mid}, GET {basePath}/screens/{mid}/{key}/v{seq}
+const delivery = { basePath: '/api/universal/v1/client', merchantId: 'merchant_demo' }
 
 const engine = createEngine({
-  screenFactory: new ScreenFactory().registerFallback(
-    universalScreenProvider({ baseUrl: '/api/universal/v1', merchantId: 'merchant_demo' })),
+  screenFactory: specScreenProvider(delivery),
+  manifestLoader: specManifestLoader(delivery),
   actionDispatcher: new ActionDispatcher({
     // payloads only NAME requests; method + path live here (the allow-list)
     network: fetchNetworkClient({
@@ -51,12 +55,15 @@ const engine = createEngine({
     }),
     navigator: browserNavigator({ navigate: (screen, params) => router.push({ name: screen, query: params }), links: { helpCenter: 'https://help.example.com' } })
   }),
-  security: PayloadSecurity.signed(await webCryptoEd25519(EMBEDDED_PUBLIC_KEY)),   // required: none = reject all
+  // required: none = reject all. keyId as the backend sends it in the envelope (universal-service:
+  // the first 16 hex chars of sha256(public key), listed by GET {basePath}/signing-keys)
+  security: PayloadSecurity.signed(keyedVerifier({ [PAYLOAD_KEY_ID]: await webCryptoEd25519(EMBEDDED_PUBLIC_KEY) })),
   assetURL: (name) => `https://cdn.example.com/sdui/${name}.webp`,
   messages: MESSAGES_ID,
   cache: new SduiCache({ store: indexedDbStore() }),
   viewport: windowViewport()
 })
+await engine.refreshManifest()   // before the first screen, and again when the app resumes
 ```
 
 ```tsx
@@ -94,6 +101,71 @@ const engine = createEngine({
 
 The host protocol, security rules and bundle distribution are in [HOST-BRIDGE.md](HOST-BRIDGE.md).
 
+## Auth: a BFF session or a bearer token
+
+The package never holds credentials. Two supported patterns:
+
+```ts
+// Web / PWA — a BFF on the app's origin holds the session cookie; send the CSRF token
+const network = fetchNetworkClient({
+  baseUrl: '/bff', endpoints,
+  credentials: 'same-origin',                                   // never 'include'
+  getHeaders: async ({ refresh }) => ({ 'X-CSRF-Token': await csrf.token({ refresh }) }),
+  traceHeaders: () => ({ traceparent: currentTraceparent() })   // optional
+})
+
+// WebView host (token pattern B) — a short-lived token from the host, in memory only
+const network = fetchNetworkClient({
+  baseUrl, endpoints,                                           // credentials: 'omit' (default)
+  getHeaders: async ({ refresh }) => ({ Authorization: `Bearer ${await host.token({ refresh })}` })
+})
+```
+
+A `401` calls `getHeaders({ refresh: true })` once and retries; a second `401` reaches
+`onError` with the server's error code, so the app can step up or log in. API results are
+never cached; headers never reach the `Logger`.
+
+## Offline and PWA
+
+```ts
+import { connectivity, onServiceWorkerUpdate } from '@fajekrina/sdui/pwa'
+
+const engine = createEngine({ /* … */, connectivity: connectivity({ probeUrl: '/healthz' }) })
+
+// "New version available": only when no screen has a deferred update or a dirty form
+onServiceWorkerUpdate({
+  canApply: () => !controllers.some((c) => c.hasPendingUpdate),
+  onAvailable: (apply) => showBanner('New version', apply)   // SW skips waiting on {type:'SKIP_WAITING'}
+})
+```
+
+- **Revalidation:** versioned screens (`…/screens/{mid}/{key}/v{seq}` from the manifest) are
+  fetched once; unversioned ones are revalidated with `If-None-Match` — a `304` costs no
+  download, decode or re-render (event `screen_not_modified`).
+- **Offline after a restart:** the last verified layout of each screen is remembered as a
+  sealed pointer in the `CacheStore` and **re-verified** when used; the screen loads with
+  `origin: 'offline'`. Nothing cached → `SduiError.network` (show an offline page).
+- **Offline actions:** `api` fails fast with a network error into `onError`; `screen.load`
+  sends nothing and reads `$load.<request> = "error"` (`$offline` is `true`).
+- **Back online:** the manifest is refreshed, then screens reload their data
+  (event `connectivity_changed`).
+- Raw bytes above `maxEnvelopeBytes` (default 1 MiB) are rejected before decode
+  (`envelope_too_large`).
+
+## Strict CSP
+
+Renderers write styles through CSSOM only and the Studio installs its stylesheet as a
+constructable stylesheet, so the bundle runs under:
+
+```
+default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self';
+require-trusted-types-for 'script'; trusted-types 'none'
+```
+
+No `innerHTML`/`eval`/style attributes anywhere (a test gate over `src/`). Engines without
+constructable stylesheets (Safari < 16.4) fall back to a `<style>` element for the Studio —
+there, pass `stylesheet: 'external'` and link `@fajekrina/sdui/builder/studio.css`.
+
 ## Authoring
 
 ```ts
@@ -129,6 +201,20 @@ screen back into code.
   message/level, params, and the `onSuccess`/`onError` chain. The lists are names
   from the app's allow-lists — URLs never enter a payload.
 - Save/Publish report `Saved ✔` / `Save failed: …` in the toolbar.
+
+For maker-checker review:
+
+```tsx
+<SduiBuilder
+  catalog={{ screens, requests, links, commands, assets }}   // names from the app's catalog
+  baseline={activeRelease}            // lists the draft's changes against the active release
+  readOnly={role === 'reviewer'}      // view only: no palette, drag & drop, edits or save
+  onSubmitForReview={(payload, note) => submit(payload, note)}  // instead of onPublish
+/>
+```
+
+`diff(base, next)` (`@fajekrina/sdui/builder`) is the same comparison, headless — for a
+review page or a backend check.
 
 ## Extending
 
@@ -168,7 +254,9 @@ npm run typecheck
 npm test             # unit + spec gate (Ajv) + core purity + React=Vue=vanilla parity
 npm run build
 npm run size         # bundle budget
-npm run conformance  # Chromium ≡ WebKit (npx playwright install chromium webkit once)
+npm run check:package  # the packed tarball typechecks for CJS and ESM consumers
+npm run conformance  # Chromium ≡ WebKit / Firefox, strict CSP (npx playwright install chromium webkit firefox)
+npm run test:contract  # against a running universal-service (SDUI_E2E_BASE_URL)
 ```
 
 See [CHANGELOG.md](CHANGELOG.md). Licensed MIT; the spec

@@ -15,7 +15,8 @@ const BUDGETS_KB = {
   'src/vanilla/index.ts': 3,
   'src/browser/index.ts': 4,
   'src/bridge/index.ts': 5,
-  'src/i18n/index.ts': 1
+  'src/i18n/index.ts': 1,
+  'src/pwa/index.ts': 1         // connectivity() + onServiceWorkerUpdate()
 }
 
 async function gzipKB(entry, external) {

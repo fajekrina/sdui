@@ -112,6 +112,17 @@ export interface ViewportPort {
 
 export const COMPACT_MAX_WIDTH = 600
 
+// MARK: - Connectivity
+
+/// Whether the network is reachable. Offline, the engine serves the last verified
+/// layout without trying the network, and `api` actions / `screen.load` fail fast;
+/// back online (`subscribe`), it refreshes the manifest and screens reload their data.
+/// Default: always online. Browser implementation: `connectivity()` in `./pwa`.
+export interface ConnectivityPort {
+  online(): boolean
+  subscribe?(listener: (online: boolean) => void): () => void
+}
+
 // MARK: - Logger
 
 /// The engine never logs tokens, PII, or `secure` field values.

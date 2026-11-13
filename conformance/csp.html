@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- HLD Target F4: the strict policy an app ships. No 'unsafe-inline' for styles or
+         scripts, Trusted Types enforced (Chromium), everything same-origin. -->
+    <meta http-equiv="Content-Security-Policy"
+          content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' ws:; require-trusted-types-for 'script'; trusted-types 'none'" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SDUI CSP</title>
+    <link rel="stylesheet" href="./csp.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="studio"></div>
+    <script type="module" src="./csp.ts"></script>
+  </body>
+</html>
