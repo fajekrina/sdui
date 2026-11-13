@@ -101,7 +101,7 @@ const CSS = `
 .sdui-studio .row{display:flex;align-items:center;gap:4px;padding:3px 8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sdui-studio .row.sel{background:#dbeafe}
 .sdui-studio .canvas{background:#f1f5f9;padding:16px;overflow:auto}
-.sdui-studio .device{margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);padding:12px;min-height:200px}
+.sdui-studio .device{flex-shrink:0;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);padding:12px;min-height:200px}
 .sdui-studio .device .hint{padding:8px;border:1px dashed #cbd5e1;border-radius:6px;color:#94a3b8;font-size:12px;text-align:center}
 .sdui-studio .device [data-label]{position:relative}
 .sdui-studio .device [data-label]::after{content:attr(data-label);position:absolute;top:-18px;left:0;padding:0 6px;border-radius:4px;background:#2563eb;color:#fff;font:10px/16px system-ui,sans-serif;white-space:nowrap;pointer-events:none;z-index:1}
